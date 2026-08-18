@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.user import User
 from app.schemas.user import TokenResponse, UserCreate, UserResponse
-from app.utils.deps import get_current_admin
+from app.utils.deps import get_current_admin, get_current_user
 from app.utils.security import create_access_token, verify_password, hash_password
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
@@ -80,6 +80,6 @@ async def register_user(
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_my_profile(current_user: User = Depends(get_current_admin)):
+async def get_my_profile(current_user: User = Depends(get_current_user)):
     """Return the profile of the currently logged-in user."""
     return current_user

@@ -1,11 +1,13 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useDeviceStore } from '../../store/deviceStore';
+import { useAuthStore } from '../../store/authStore';
 import { DeviceModal } from '../dashboard/DeviceModal';
 import { Plus, Train, MapPin, Edit, Trash2, Server } from 'lucide-react';
 import api from '../../utils/api';
 
 export const ManageDevicesPage = () => {
   const { devices, isLoading, fetchDevices } = useDeviceStore();
+  const { user } = useAuthStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deviceToEdit, setDeviceToEdit] = useState(null);
   const [initialData, setInitialData] = useState(null);
@@ -21,7 +23,8 @@ export const ManageDevicesPage = () => {
         fetchDevices();
       } catch (err) {
         console.error("Failed to delete device", err);
-        alert("Failed to delete device");
+        const msg = err.response?.data?.detail || err.message || "Failed to delete device";
+        alert(`Failed to delete device: ${msg}`);
       }
     }
   };
@@ -48,12 +51,14 @@ export const ManageDevicesPage = () => {
     <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <h2 style={{ fontSize: '24px', fontWeight: '700', margin: 0 }}>Manage Devices</h2>
-        <button 
-          onClick={() => { setDeviceToEdit(null); setInitialData(null); setIsModalOpen(true); }}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', borderRadius: '8px', background: 'var(--status-green)', color: 'white', border: 'none', cursor: 'pointer', fontWeight: '600' }}
-        >
-          <Plus size={18} /> Add Device
-        </button>
+        {user?.role === 'admin' && (
+          <button 
+            onClick={() => { setDeviceToEdit(null); setInitialData(null); setIsModalOpen(true); }}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', borderRadius: '8px', background: 'var(--status-green)', color: 'white', border: 'none', cursor: 'pointer', fontWeight: '600' }}
+          >
+            <Plus size={18} /> Add Device
+          </button>
+        )}
       </div>
       
       {isLoading && devices.length === 0 ? (
@@ -72,7 +77,7 @@ export const ManageDevicesPage = () => {
               <div style={{ padding: '16px 20px', background: 'var(--bg-card)', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <Train size={20} color="var(--text-secondary)" />
                 <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>Train: {trainName}</h3>
-                {trainName !== 'Unassigned Train' && (
+                {user?.role === 'admin' && trainName !== 'Unassigned Train' && (
                   <button 
                     onClick={() => { setDeviceToEdit(null); setInitialData({ train_no: trainName }); setIsModalOpen(true); }}
                     style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '6px', background: 'rgba(46, 204, 113, 0.1)', color: 'var(--status-green)', border: '1px solid rgba(46, 204, 113, 0.5)', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}
@@ -102,8 +107,12 @@ export const ManageDevicesPage = () => {
                             )}
                           </div>
                           <div style={{ display: 'flex', gap: '8px' }}>
-                            <button onClick={() => handleEdit(device)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><Edit size={16} /></button>
-                            <button onClick={() => handleDelete(device.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--status-red)' }}><Trash2 size={16} /></button>
+                            {user?.role === 'admin' && (
+                              <>
+                                <button onClick={() => handleEdit(device)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><Edit size={16} /></button>
+                                <button onClick={() => handleDelete(device.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--status-red)' }}><Trash2 size={16} /></button>
+                              </>
+                            )}
                           </div>
                         </div>
                       ))}

@@ -2,7 +2,11 @@ import { useEffect, useRef } from 'react';
 import { useDeviceStore } from '../store/deviceStore';
 import { useAlertStore } from '../store/alertStore';
 
-export const useWebSocket = (url = 'ws://localhost:8000/ws/telemetry') => {
+const defaultWsUrl = import.meta.env.VITE_WS_BASE_URL || (typeof window !== 'undefined' 
+  ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/telemetry` 
+  : null);
+
+export const useWebSocket = (url = defaultWsUrl) => {
   const ws = useRef(null);
   const { setWsStatus, updateDeviceTelemetry } = useDeviceStore();
   const { addRealtimeAlert } = useAlertStore();

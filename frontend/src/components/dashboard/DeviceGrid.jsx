@@ -1,30 +1,56 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useDeviceStore } from '../../store/deviceStore';
 import { DeviceCard } from './DeviceCard';
+import { DashboardStats } from './DashboardStats';
 import { useWebSocket } from '../../hooks/useWebSocket';
-import { Filter, Plus, X, Train } from 'lucide-react';
+import { 
+  Filter, 
+  Search, 
+  Train, 
+  ChevronDown, 
+  ChevronRight, 
+  RefreshCw, 
+  SlidersHorizontal, 
+  LayoutGrid, 
+  Radio, 
+  Wifi, 
+  WifiOff, 
+  X,
+  Layers,
+  Grid3X3,
+  Check
+} from 'lucide-react';
 
 export const DeviceGrid = () => {
   const { devices, isLoading, error, fetchDevices } = useDeviceStore();
-  const [selectedTrain, setSelectedTrain] = useState('');
-  const [selectedCoach, setSelectedCoach] = useState('All');
-  const [activeFilters, setActiveFilters] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedTrain, setSelectedTrain] = useState('ALL');
+  const [selectedCoach, setSelectedCoach] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'ONLINE' | 'OFFLINE'
+  const [viewMode, setViewMode] = useState('HIERARCHY'); // 'HIERARCHY' | 'FLAT'
+  const [collapsedTrains, setCollapsedTrains] = useState({});
 
-  // Initialize WebSocket connection for live updates
+  // Initialize WebSocket connection for live telemetry stream
   useWebSocket();
 
   useEffect(() => {
     fetchDevices();
   }, [fetchDevices]);
 
+  // Unique Trains list for filter dropdown and quick-select pills
   const uniqueTrains = useMemo(() => {
     const trains = new Set();
     devices.forEach(d => { if (d.train_no) trains.add(d.train_no); });
     return Array.from(trains).sort();
   }, [devices]);
 
+  // Unique Coaches for selected train
   const uniqueCoaches = useMemo(() => {
-    if (!selectedTrain) return [];
+    if (selectedTrain === 'ALL') {
+      const coaches = new Set();
+      devices.forEach(d => { if (d.coach_no) coaches.add(d.coach_no); });
+      return Array.from(coaches).sort();
+    }
     const coaches = new Set();
     devices.forEach(d => {
       if (d.train_no === selectedTrain && d.coach_no) coaches.add(d.coach_no);
@@ -32,54 +58,52 @@ export const DeviceGrid = () => {
     return Array.from(coaches).sort();
   }, [devices, selectedTrain]);
 
-  // Reset coach when train changes
+  // Reset coach selection when train changes
   useEffect(() => {
-    setSelectedCoach('All');
+    setSelectedCoach('ALL');
   }, [selectedTrain]);
 
-  const handleAddFilter = () => {
-    if (!selectedTrain) return;
-    
-    // Check if filter already exists
-    const exists = activeFilters.some(f => f.train === selectedTrain && f.coach === selectedCoach);
-    if (!exists) {
-      setActiveFilters([...activeFilters, { train: selectedTrain, coach: selectedCoach }]);
-    }
-    
-    // Reset selection
-    setSelectedTrain('');
-    setSelectedCoach('All');
-  };
-
-  const removeFilter = (indexToRemove) => {
-    setActiveFilters(activeFilters.filter((_, i) => i !== indexToRemove));
-  };
-
+  // Filter devices based on Search Term, Selected Train, Coach, and Status
   const filteredDevices = useMemo(() => {
-    if (activeFilters.length === 0) return [];
-    
-    // Use a Map to ensure unique devices even if they match multiple filters
-    const matchedDevices = new Map();
-    
-    devices.forEach(d => {
-      const matches = activeFilters.some(filter => {
-        if (d.train_no !== filter.train) return false;
-        if (filter.coach !== 'All' && d.coach_no !== filter.coach) return false;
-        return true;
-      });
-      if (matches) {
-        matchedDevices.set(d.id || d.mac_address, d);
+    return devices.filter(d => {
+      // 1. Train filter
+      if (selectedTrain !== 'ALL' && d.train_no !== selectedTrain) {
+        return false;
       }
-    });
-    
-    return Array.from(matchedDevices.values());
-  }, [devices, activeFilters]);
+      // 2. Coach filter
+      if (selectedCoach !== 'ALL' && d.coach_no !== selectedCoach) {
+        return false;
+      }
+      // 3. Online/Offline filter
+      if (statusFilter === 'ONLINE' && !d.is_online) return false;
+      if (statusFilter === 'OFFLINE' && d.is_online) return false;
 
-  const groupedFilteredDevices = useMemo(() => {
+      // 4. Smart Multi-Field Search (Train No, Coach No, Name, MAC, Location)
+      if (searchTerm.trim() !== '') {
+        const query = searchTerm.toLowerCase().replace(/:/g, '');
+        const macClean = (d.mac_address || '').toLowerCase().replace(/:/g, '');
+        const trainMatch = (d.train_no || '').toLowerCase().includes(query);
+        const coachMatch = (d.coach_no || '').toLowerCase().includes(query);
+        const nameMatch = (d.name || '').toLowerCase().includes(query);
+        const macMatch = macClean.includes(query) || (d.mac_address || '').toLowerCase().includes(query);
+        const locMatch = (d.location || '').toLowerCase().includes(query);
+        const typeMatch = (d.device_type || '').toLowerCase().includes(query);
+        
+        if (!trainMatch && !coachMatch && !nameMatch && !macMatch && !locMatch && !typeMatch) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [devices, selectedTrain, selectedCoach, statusFilter, searchTerm]);
+
+  // Group filtered devices by Train -> Coach
+  const groupedDevices = useMemo(() => {
     const map = {};
     filteredDevices.forEach(d => {
-      const train = d.train_no || 'Unassigned Train';
-      const coach = d.coach_no || 'Unassigned Coach';
+      const train = d.train_no || 'Unassigned Fleet';
+      const coach = d.coach_no || 'General Coach';
       if (!map[train]) map[train] = {};
       if (!map[train][coach]) map[train][coach] = [];
       map[train][coach].push(d);
@@ -87,123 +111,290 @@ export const DeviceGrid = () => {
     return map;
   }, [filteredDevices]);
 
+  const toggleTrainCollapse = (trainName) => {
+    setCollapsedTrains(prev => ({
+      ...prev,
+      [trainName]: !prev[trainName]
+    }));
+  };
+
+  const clearAllFilters = () => {
+    setSearchTerm('');
+    setSelectedTrain('ALL');
+    setSelectedCoach('ALL');
+    setStatusFilter('ALL');
+  };
+
+  const isFiltered = searchTerm !== '' || selectedTrain !== 'ALL' || selectedCoach !== 'ALL' || statusFilter !== 'ALL';
+
   if (isLoading && devices.length === 0) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
-        <p style={{ color: 'var(--text-secondary)' }}>Loading devices...</p>
+      <div className="dashboard-loading-state">
+        <div className="pulse-spinner" />
+        <h3>Connecting to Live Telemetry Stream...</h3>
+        <p>Fetching active FSDS monitoring nodes and fleet registry.</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div style={{ padding: '24px', background: 'var(--status-red-bg)', color: 'var(--status-red)', borderRadius: '12px' }}>
-        <h3>Error loading devices</h3>
+      <div className="dashboard-error-banner">
+        <h3>Communication Failure</h3>
         <p>{error}</p>
+        <button onClick={() => fetchDevices()} className="btn-retry">
+          <RefreshCw size={14} /> Retry Connection
+        </button>
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', background: 'var(--bg-card)', padding: '16px 24px', borderRadius: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)' }}>
-            <Filter size={20} />
-            <span style={{ fontWeight: '600' }}>Filter Dashboard</span>
+    <div className="dashboard-container">
+      {/* 1. Fleet KPI Stats Ribbon */}
+      <DashboardStats devices={devices} />
+
+      {/* 2. Instant Search & Smart Multi-Filter Bar */}
+      <div className="dashboard-filter-ribbon">
+        {/* Main Toolbar Controls */}
+        <div className="filter-ribbon-top">
+          {/* Instant Search Bar */}
+          <div className="search-input-wrapper">
+            <Search size={16} className="search-icon" />
+            <input 
+              type="text"
+              className="search-input"
+              placeholder="Instant Search: Train #, Coach #, MAC address, or Node name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') setSearchTerm(''); }}
+            />
+            {searchTerm && (
+              <button 
+                className="clear-search-btn" 
+                onClick={() => setSearchTerm('')}
+                title="Clear Search"
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
-          
-          <div style={{ display: 'flex', gap: '16px', marginLeft: 'auto' }}>
-            <select 
-              value={selectedTrain}
-              onChange={(e) => setSelectedTrain(e.target.value)}
-              style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.1)', background: 'var(--bg-primary)' }}
-            >
-              <option value="">Select Train...</option>
-              {uniqueTrains.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-            
-            <select
-              value={selectedCoach}
-              onChange={(e) => setSelectedCoach(e.target.value)}
-              disabled={!selectedTrain}
-              style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.1)', background: 'var(--bg-primary)' }}
-            >
-              <option value="All">All Coaches</option>
-              {uniqueCoaches.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            
-            <button 
-              onClick={handleAddFilter}
-              disabled={!selectedTrain}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '8px', background: selectedTrain ? 'var(--status-green)' : 'var(--status-gray)', color: 'white', border: 'none', cursor: selectedTrain ? 'pointer' : 'not-allowed', fontWeight: '600' }}
-            >
-              <Plus size={16} /> Add to Dashboard
+
+          {/* Dropdowns & Action Controls */}
+          <div className="filter-controls-group">
+            {/* Train Dropdown */}
+            <div className="filter-select-wrapper">
+              <Train size={14} className="filter-select-icon" />
+              <select 
+                value={selectedTrain} 
+                onChange={(e) => setSelectedTrain(e.target.value)}
+                className="filter-select"
+              >
+                <option value="ALL">All Trains ({uniqueTrains.length})</option>
+                {uniqueTrains.map(t => (
+                  <option key={t} value={t}>Train {t}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Coach Dropdown */}
+            <div className="filter-select-wrapper">
+              <LayoutGrid size={14} className="filter-select-icon" />
+              <select 
+                value={selectedCoach} 
+                onChange={(e) => setSelectedCoach(e.target.value)}
+                className="filter-select"
+                disabled={uniqueCoaches.length === 0}
+              >
+                <option value="ALL">All Coaches ({uniqueCoaches.length})</option>
+                {uniqueCoaches.map(c => (
+                  <option key={c} value={c}>Coach {c}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Live Status Filter Chips */}
+            <div className="status-toggle-chips">
+              <button 
+                className={`status-chip ${statusFilter === 'ALL' ? 'active' : ''}`}
+                onClick={() => setStatusFilter('ALL')}
+              >
+                All
+              </button>
+              <button 
+                className={`status-chip chip-online ${statusFilter === 'ONLINE' ? 'active' : ''}`}
+                onClick={() => setStatusFilter('ONLINE')}
+              >
+                <span className="chip-dot dot-green" /> Live
+              </button>
+              <button 
+                className={`status-chip chip-offline ${statusFilter === 'OFFLINE' ? 'active' : ''}`}
+                onClick={() => setStatusFilter('OFFLINE')}
+              >
+                <span className="chip-dot dot-gray" /> Offline
+              </button>
+            </div>
+
+            {/* View Mode Toggle: Hierarchy vs Flat */}
+            <div className="view-mode-toggles">
+              <button 
+                className={`view-mode-btn ${viewMode === 'HIERARCHY' ? 'active' : ''}`}
+                onClick={() => setViewMode('HIERARCHY')}
+                title="Fleet Hierarchy View (Train -> Coach -> Device)"
+              >
+                <Layers size={15} />
+              </button>
+              <button 
+                className={`view-mode-btn ${viewMode === 'FLAT' ? 'active' : ''}`}
+                onClick={() => setViewMode('FLAT')}
+                title="Compact Grid View"
+              >
+                <Grid3X3 size={15} />
+              </button>
+            </div>
+
+            {/* Reset Filters */}
+            {isFiltered && (
+              <button className="btn-reset-filters" onClick={clearAllFilters} title="Reset all filters">
+                <X size={14} /> Reset
+              </button>
+            )}
+
+            {/* Refresh Button */}
+            <button className="btn-refresh-data" onClick={() => fetchDevices()} title="Refresh live fleet data">
+              <RefreshCw size={14} />
             </button>
           </div>
         </div>
-        
-        {activeFilters.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', paddingTop: '16px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
-            {activeFilters.map((filter, idx) => (
-              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-primary)', padding: '6px 12px', borderRadius: '20px', fontSize: '14px', border: '1px solid rgba(0,0,0,0.1)' }}>
-                <span style={{ fontWeight: '600' }}>{filter.train}</span>
-                <span style={{ color: 'var(--text-secondary)' }}>|</span>
-                <span>{filter.coach === 'All' ? 'All Coaches' : `Coach: ${filter.coach}`}</span>
-                <button 
-                  onClick={() => removeFilter(idx)}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.05)', border: 'none', borderRadius: '50%', padding: '2px', cursor: 'pointer', marginLeft: '4px', color: 'var(--text-secondary)' }}
+
+        {/* Quick-Select Train Pills Ribbon */}
+        {uniqueTrains.length > 0 && (
+          <div className="quick-train-pills-bar">
+            <span className="quick-filter-label">Quick Fleets:</span>
+            <button 
+              className={`train-filter-pill ${selectedTrain === 'ALL' ? 'active-pill' : ''}`}
+              onClick={() => setSelectedTrain('ALL')}
+            >
+              All Fleets ({devices.length})
+            </button>
+            {uniqueTrains.map(trainNum => {
+              const trainCount = devices.filter(d => d.train_no === trainNum).length;
+              return (
+                <button
+                  key={trainNum}
+                  className={`train-filter-pill ${selectedTrain === trainNum ? 'active-pill' : ''}`}
+                  onClick={() => setSelectedTrain(selectedTrain === trainNum ? 'ALL' : trainNum)}
                 >
-                  <X size={14} />
+                  <Train size={12} className="pill-icon" />
+                  <span>Train {trainNum}</span>
+                  <span className="pill-badge">{trainCount}</span>
                 </button>
-              </div>
-            ))}
+              );
+            })}
+
+            {/* Results Counter */}
+            <span className="filtered-results-counter">
+              Showing <strong>{filteredDevices.length}</strong> of {devices.length} Nodes
+            </span>
           </div>
         )}
       </div>
 
-      {activeFilters.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 20px', background: 'var(--bg-card)', borderRadius: '12px' }}>
-          <h3 style={{ color: 'var(--text-primary)', marginBottom: '8px' }}>No Trains Selected</h3>
-          <p style={{ color: 'var(--text-secondary)' }}>Please use the filter above to add trains to your dashboard view.</p>
+      {/* 3. Telemetry Stream Output (Default: Shows all active trains immediately) */}
+      {filteredDevices.length === 0 ? (
+        <div className="empty-dashboard-card">
+          <div className="empty-icon-circle">
+            <Radio size={32} />
+          </div>
+          <h3>No Telemetry Nodes Match Filter</h3>
+          <p>No active monitoring nodes match your current search query or filter selection.</p>
+          {isFiltered && (
+            <button className="btn-primary-action" onClick={clearAllFilters}>
+              Clear All Filters
+            </button>
+          )}
         </div>
-      ) : filteredDevices.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 20px', background: 'var(--bg-card)', borderRadius: '12px' }}>
-          <h3 style={{ color: 'var(--text-primary)', marginBottom: '8px' }}>No Devices Found</h3>
-          <p style={{ color: 'var(--text-secondary)' }}>No devices match your active filters.</p>
+      ) : viewMode === 'FLAT' ? (
+        /* Flat Grid View */
+        <div className="flat-telemetry-grid">
+          {filteredDevices.map(device => (
+            <DeviceCard 
+              key={device.id || device.mac_address}
+              device={device}
+              hideActions={true}
+            />
+          ))}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          {Object.entries(groupedFilteredDevices).sort((a,b) => a[0].localeCompare(b[0])).map(([trainName, coaches]) => (
-            <div key={trainName} className="card" style={{ padding: '0', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.05)' }}>
-              <div style={{ padding: '16px 20px', background: 'var(--bg-card)', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', background: 'rgba(46, 204, 113, 0.1)', borderRadius: '8px' }}>
-                  <Train size={18} color="var(--status-green)" />
-                </div>
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700' }}>Train: {trainName}</h3>
-              </div>
-              <div style={{ padding: '20px', background: 'var(--bg-primary)', display: 'flex', flexWrap: 'wrap', gap: '32px', alignItems: 'flex-start' }}>
-                {Object.entries(coaches).sort((a,b) => a[0].localeCompare(b[0])).map(([coachName, coachDevices]) => (
-                  <div key={coachName} style={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: '300px' }}>
-                    <div style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{ width: '4px', height: '16px', background: 'var(--status-green)', borderRadius: '2px' }} />
-                      Coach: {coachName}
+        /* Hierarchy View: Grouped by Train -> Coach -> Device */
+        <div className="fleet-hierarchy-stream">
+          {Object.entries(groupedDevices).sort((a,b) => a[0].localeCompare(b[0])).map(([trainName, coaches]) => {
+            const isCollapsed = collapsedTrains[trainName];
+            const trainDevicesList = Object.values(coaches).flat();
+            const onlineCount = trainDevicesList.filter(d => d.is_online).length;
+            const coachCount = Object.keys(coaches).length;
+
+            return (
+              <div key={trainName} className="train-fleet-card">
+                {/* Train Header Banner */}
+                <div 
+                  className="train-fleet-header"
+                  onClick={() => toggleTrainCollapse(trainName)}
+                >
+                  <div className="train-header-left">
+                    <div className="train-avatar-badge">
+                      <Train size={18} />
                     </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px' }}>
-                      {coachDevices.map(device => (
-                        <div key={device.id || device.mac_address} style={{ flex: '1 1 300px', maxWidth: '400px' }}>
-                          <DeviceCard 
-                            device={device} 
-                            hideActions={true}
-                          />
-                        </div>
-                      ))}
+                    <div className="train-title-wrap">
+                      <h3 className="train-name-heading">
+                        {trainName === 'Unassigned Fleet' ? trainName : `Train: ${trainName}`}
+                      </h3>
+                      <span className="train-metrics-badge">
+                        {coachCount} {coachCount === 1 ? 'Coach' : 'Coaches'} • {trainDevicesList.length} Nodes
+                      </span>
                     </div>
                   </div>
-                ))}
+
+                  <div className="train-header-right">
+                    <div className="train-live-pill">
+                      <span className={`pill-pulse-dot ${onlineCount > 0 ? 'pulse-green' : 'pulse-gray'}`} />
+                      <span>{onlineCount} / {trainDevicesList.length} Live</span>
+                    </div>
+                    <button className="train-collapse-btn">
+                      {isCollapsed ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Train Coaches & Telemetry Grid (Collapsible) */}
+                {!isCollapsed && (
+                  <div className="train-fleet-body">
+                    {Object.entries(coaches).sort((a,b) => a[0].localeCompare(b[0])).map(([coachName, coachDevices]) => (
+                      <div key={coachName} className="coach-section-block">
+                        <div className="coach-section-header">
+                          <div className="coach-stripe-indicator" />
+                          <h4 className="coach-section-title">
+                            {coachName === 'General Coach' ? coachName : `Coach: ${coachName}`}
+                          </h4>
+                          <span className="coach-node-count">({coachDevices.length} Nodes)</span>
+                        </div>
+
+                        <div className="device-telemetry-grid">
+                          {coachDevices.map(device => (
+                            <DeviceCard 
+                              key={device.id || device.mac_address}
+                              device={device}
+                              hideActions={true}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

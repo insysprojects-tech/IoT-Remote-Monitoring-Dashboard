@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAlertStore } from '../../store/alertStore';
+import { useAuthStore } from '../../store/authStore';
 import { useDeviceStore } from '../../store/deviceStore';
 import {
   Plus,
@@ -173,6 +174,7 @@ const CreateRuleModal = ({ isOpen, onClose, devices, onSubmit }) => {
 // ========================================
 export const AlertRulesPage = () => {
   const { rules, events, fetchRules, fetchEvents, createRule, deleteRule, updateRule, acknowledgeEvent, acknowledgeAll } = useAlertStore();
+  const { user } = useAuthStore();
   const { devices, fetchDevices } = useDeviceStore();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [activeTab, setActiveTab] = useState('events');
@@ -211,9 +213,11 @@ export const AlertRulesPage = () => {
             Configure threshold rules and view triggered alerts
           </p>
         </div>
-        <button className="btn-primary" onClick={() => setShowCreateModal(true)}>
-          <Plus size={18} /> New Rule
-        </button>
+        {user?.role === 'admin' && (
+          <button className="btn-primary" onClick={() => setShowCreateModal(true)}>
+            <Plus size={18} /> New Rule
+          </button>
+        )}
       </div>
 
       {/* Tabs */}
@@ -323,9 +327,11 @@ export const AlertRulesPage = () => {
               <Bell size={48} style={{ opacity: 0.2 }} />
               <h3>No alert rules configured</h3>
               <p>Create a rule to start monitoring your devices.</p>
-              <button className="btn-primary" onClick={() => setShowCreateModal(true)}>
-                <Plus size={18} /> Create First Rule
-              </button>
+              {user?.role === 'admin' && (
+                <button className="btn-primary" onClick={() => setShowCreateModal(true)}>
+                  <Plus size={18} /> Create First Rule
+                </button>
+              )}
             </div>
           ) : (
             <div className="alerts-rules-grid">
@@ -339,25 +345,27 @@ export const AlertRulesPage = () => {
                         <SeverityIcon size={16} />
                         {rule.severity.toUpperCase()}
                       </div>
-                      <div className="rule-card-actions">
-                        <button
-                          className="rule-toggle-btn"
-                          onClick={() => handleToggleRule(rule)}
-                          title={rule.enabled ? 'Disable rule' : 'Enable rule'}
-                        >
-                          {rule.enabled
-                            ? <ToggleRight size={24} style={{ color: 'var(--status-green)' }} />
-                            : <ToggleLeft size={24} style={{ color: 'var(--text-muted)' }} />
-                          }
-                        </button>
-                        <button
-                          className="rule-delete-btn"
-                          onClick={() => handleDeleteRule(rule.id)}
-                          title="Delete rule"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
+                      {user?.role === 'admin' && (
+                        <div className="rule-card-actions">
+                          <button
+                            className="rule-toggle-btn"
+                            onClick={() => handleToggleRule(rule)}
+                            title={rule.enabled ? 'Disable rule' : 'Enable rule'}
+                          >
+                            {rule.enabled
+                              ? <ToggleRight size={24} style={{ color: 'var(--status-green)' }} />
+                              : <ToggleLeft size={24} style={{ color: 'var(--text-muted)' }} />
+                            }
+                          </button>
+                          <button
+                            className="rule-delete-btn"
+                            onClick={() => handleDeleteRule(rule.id)}
+                            title="Delete rule"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <div className="rule-card-body">
                       <p className="rule-condition">

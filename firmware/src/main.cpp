@@ -24,7 +24,11 @@ TinyGsm modem(SerialAT);
 // --- Sensor Pins ---
 const int BATTERY_PIN = 7, VOLTAGE_SENSOR_2_PIN = 6, HW122_1_VOUT_PIN = 5, HW122_2_VOUT_PIN = 8;
 float R1 = 30000, R2 = 7500, calibration_factor = 1.0245;
-unsigned long lastPublish = 0;
+
+// Base interval of 3 seconds (3000 ms)
+const unsigned long BASE_INTERVAL = 3000; 
+unsigned long lastPublishTime = 0;
+long currentJitter = 0;
 
 // Helper: send AT command and print response for debugging
 bool sendATCommand(const char* cmd, const char* expectedResp, unsigned long timeout = 5000) {
@@ -210,7 +214,13 @@ void setup() {
 
   Serial.println("\n=============================================");
   Serial.println("  ESP32-S3 SIM7670 Native MQTT+SSL Dashboard");
-  Serial.println("=============================================\n");
+  Serial.println("=============================================");
+
+  // Read an unconnected analog pin to generate a truly random seed
+  randomSeed(analogRead(0)); 
+
+  // Initial random stagger (0 to 3000ms) so devices scatter immediately on boot
+  currentJitter = random(0, 3000); 
 
   powerOn();
 
@@ -233,9 +243,10 @@ void loop() {
     Serial.write(SerialAT.read());
   }
 
-  if (millis() - lastPublish > 1000) {
-    lastPublish = millis();
+  unsigned long currentTime = millis();
 
+  // Fire only when base interval + random jitter has elapsed
+  if (currentTime - lastPublishTime >= (BASE_INTERVAL + currentJitter)) {
     // 1. Read and Calculate Battery Voltages
     float battery1Voltage = (analogRead(BATTERY_PIN) / 4095.0) * 3.3 * 5.0;
     float battery2Voltage = (analogRead(VOLTAGE_SENSOR_2_PIN) / 4095.0) * 3.3 * 5.0;
@@ -258,5 +269,10 @@ void loop() {
     } else {
       Serial.println(" -> FAILED");
     }
+
+    lastPublishTime = currentTime;
+
+    // Generate a new offset between -500ms and +500ms for the next cycle
+    currentJitter = random(-500, 500);
   }
 }

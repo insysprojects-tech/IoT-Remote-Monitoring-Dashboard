@@ -27,8 +27,13 @@ export const LoginPage = () => {
     }}>
       <div className="card" style={{ width: '100%', maxWidth: '400px', padding: '40px' }}>
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-          <h1 style={{ fontSize: '24px', margin: '0 0 8px 0' }}>IoT Monitor</h1>
-          <p style={{ color: 'var(--text-secondary)' }}>Sign in to access your dashboard</p>
+          <h1 style={{ fontSize: '28px', fontWeight: '800', margin: '0 0 6px 0', letterSpacing: '-0.5px' }}>FSDS</h1>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '13px', margin: '0 0 10px 0', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Fire & Smoke Detection System
+          </p>
+          <p style={{ color: 'var(--text-primary)', fontSize: '16px', fontWeight: '600', margin: 0 }}>
+            Sign in to access telemetry
+          </p>
         </div>
 
         {error && (

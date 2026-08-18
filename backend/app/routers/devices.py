@@ -13,7 +13,7 @@ from app.database import get_db
 from app.models.device import Device
 from app.models.user import User
 from app.schemas.device import DeviceCreate, DeviceResponse, DeviceSummary, DeviceUpdate
-from app.utils.deps import get_current_user
+from app.utils.deps import get_current_user, get_current_admin
 
 router = APIRouter(prefix="/api/devices", tags=["Devices"])
 
@@ -76,7 +76,7 @@ async def get_device(
 async def create_device(
     payload: DeviceCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_admin: User = Depends(get_current_admin),
 ):
     """Register a new device."""
     # Check for duplicate MAC
@@ -91,6 +91,7 @@ async def create_device(
     device = Device(**payload.model_dump())
     db.add(device)
     await db.flush()
+    await db.commit()
     await db.refresh(device)
     return device
 
@@ -100,7 +101,7 @@ async def update_device(
     device_id: uuid.UUID,
     payload: DeviceUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_admin: User = Depends(get_current_admin),
 ):
     """Update an existing device's configuration."""
     result = await db.execute(select(Device).where(Device.id == device_id))
@@ -114,6 +115,7 @@ async def update_device(
         setattr(device, key, value)
 
     await db.flush()
+    await db.commit()
     await db.refresh(device)
     return device
 
@@ -122,7 +124,7 @@ async def update_device(
 async def delete_device(
     device_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_admin: User = Depends(get_current_admin),
 ):
     """Delete a device and all its telemetry data."""
     result = await db.execute(select(Device).where(Device.id == device_id))
@@ -132,3 +134,4 @@ async def delete_device(
         raise HTTPException(status_code=404, detail="Device not found")
 
     await db.delete(device)
+    await db.commit()

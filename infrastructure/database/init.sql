@@ -52,6 +52,19 @@ SELECT create_hypertable('telemetry', 'time', if_not_exists => TRUE, chunk_time_
 
 CREATE INDEX IF NOT EXISTS idx_telemetry_device ON telemetry(device_id, time DESC);
 
+-- 1. Enable columnar compression
+ALTER TABLE telemetry SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'device_id',
+  timescaledb.compress_orderby = 'time DESC'
+);
+
+-- 2. Compress data older than 7 days
+SELECT add_compression_policy('telemetry', INTERVAL '7 days', if_not_exists => TRUE);
+
+-- 3. Delete data older than 1 year
+SELECT add_retention_policy('telemetry', INTERVAL '365 days', if_not_exists => TRUE);
+
 -- =====================
 -- Users (Authentication)
 -- =====================

@@ -65,7 +65,7 @@ async def list_alert_rules(
 async def create_alert_rule(
     payload: AlertRuleCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_admin: User = Depends(get_current_admin),
 ):
     """Create a new alert rule for a device."""
     # Verify device exists
@@ -79,6 +79,7 @@ async def create_alert_rule(
     rule = AlertRule(**payload.model_dump())
     db.add(rule)
     await db.flush()
+    await db.commit()
     await db.refresh(rule)
 
     response = AlertRuleResponse.model_validate(rule)
@@ -91,7 +92,7 @@ async def update_alert_rule(
     rule_id: uuid.UUID,
     payload: AlertRuleUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_admin: User = Depends(get_current_admin),
 ):
     """Update an existing alert rule."""
     result = await db.execute(select(AlertRule).where(AlertRule.id == rule_id))
@@ -105,6 +106,7 @@ async def update_alert_rule(
         setattr(rule, key, value)
 
     await db.flush()
+    await db.commit()
     await db.refresh(rule)
 
     response = AlertRuleResponse.model_validate(rule)
@@ -117,7 +119,7 @@ async def update_alert_rule(
 async def delete_alert_rule(
     rule_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_admin: User = Depends(get_current_admin),
 ):
     """Delete an alert rule and all its events."""
     result = await db.execute(select(AlertRule).where(AlertRule.id == rule_id))
@@ -127,6 +129,7 @@ async def delete_alert_rule(
         raise HTTPException(status_code=404, detail="Alert rule not found")
 
     await db.delete(rule)
+    await db.commit()
 
 
 # ==========================================
@@ -184,6 +187,7 @@ async def acknowledge_alert_event(
 
     event.acknowledged = True
     await db.flush()
+    await db.commit()
     await db.refresh(event)
 
     response = AlertEventResponse.model_validate(event)
@@ -203,6 +207,7 @@ async def acknowledge_all_events(
         .where(AlertEvent.acknowledged == False)
         .values(acknowledged=True)
     )
+    await db.commit()
     return {"message": "All alerts acknowledged"}
 
 

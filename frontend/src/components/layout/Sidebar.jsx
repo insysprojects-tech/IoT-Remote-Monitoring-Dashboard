@@ -49,7 +49,7 @@ export const Sidebar = () => {
         }}>
           <Activity size={18} />
         </div>
-        <h2 style={{ fontSize: '18px', fontWeight: '700', margin: 0 }}>IoT Monitor</h2>
+        <h2 style={{ fontSize: '18px', fontWeight: '800', letterSpacing: '-0.3px', margin: 0 }}>FSDS Monitor</h2>
       </div>
 
       <nav style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -57,10 +57,12 @@ export const Sidebar = () => {
           <LayoutDashboard size={20} />
           Dashboard
         </button>
-        <button onClick={() => navigate('/manage-devices')} style={navLinkStyle('/manage-devices')}>
-          <Database size={20} />
-          Manage Devices
-        </button>
+        {user?.role === 'admin' && (
+          <button onClick={() => navigate('/manage-devices')} style={navLinkStyle('/manage-devices')}>
+            <Database size={20} />
+            Manage Devices
+          </button>
+        )}
         <button onClick={() => navigate('/alerts')} style={navLinkStyle('/alerts')}>
           <Bell size={20} />
           Alerts

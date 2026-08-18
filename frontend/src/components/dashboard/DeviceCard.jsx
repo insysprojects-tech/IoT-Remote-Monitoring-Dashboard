@@ -1,14 +1,32 @@
-import { Battery, Zap, Clock, MapPin, Edit, Trash2, Train, Power, Timer, Activity } from 'lucide-react';
+import React from 'react';
+import { 
+  Battery, 
+  Zap, 
+  Clock, 
+  MapPin, 
+  Edit, 
+  Trash2, 
+  Train, 
+  Power, 
+  Timer, 
+  Activity,
+  Wind,
+  ShieldAlert,
+  ChevronRight,
+  Wifi,
+  WifiOff,
+  Gauge,
+  Cpu
+} from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 
 export const DeviceCard = ({ device, onEdit, onDelete, hideActions }) => {
   const navigate = useNavigate();
-  const isOnline = device.is_online;
-  const statusColor = isOnline ? 'var(--status-green)' : 'var(--status-gray)';
-  
-  // Format last seen time
-  let lastSeenText = 'Never';
+  const isOnline = Boolean(device.is_online);
+
+  // Format relative timestamp
+  let lastSeenText = 'Offline';
   if (device.last_seen) {
     try {
       lastSeenText = formatDistanceToNow(new Date(device.last_seen), { addSuffix: true });
@@ -17,172 +35,230 @@ export const DeviceCard = ({ device, onEdit, onDelete, hideActions }) => {
     }
   }
 
-  // Calculate battery percentage roughly based on Li-ion voltage (3.0V - 4.2V)
+  // Calculate 12V Battery Percentage based on 10.5V (0%) - 13.8V (100%)
   const getBatteryPercent = (voltage) => {
-    if (!voltage) return 0;
-    const v = Math.min(Math.max(voltage, 3.0), 4.2);
-    return Math.round(((v - 3.0) / 1.2) * 100);
+    if (voltage === null || voltage === undefined || isNaN(voltage)) return null;
+    const minV = 10.5;
+    const maxV = 13.8;
+    const clamped = Math.min(Math.max(voltage, minV), maxV);
+    return Math.round(((clamped - minV) / (maxV - minV)) * 100);
   };
 
-  const bat1Percent = getBatteryPercent(device.battery_1_voltage);
-  const bat2Percent = getBatteryPercent(device.battery_2_voltage);
+  // Voltage Thresholds: Emerald >= 12.0V, Amber 11.2V - 12.0V, Rose < 11.2V
+  const getVoltageStatusClass = (voltage) => {
+    if (voltage === null || voltage === undefined || isNaN(voltage)) return 'voltage-neutral';
+    if (voltage >= 12.0) return 'voltage-emerald';
+    if (voltage >= 11.2) return 'voltage-amber';
+    return 'voltage-rose';
+  };
+
+  const getVoltageLabel = (voltage) => {
+    if (voltage === null || voltage === undefined || isNaN(voltage)) return 'No Signal';
+    if (voltage >= 12.0) return 'Optimal';
+    if (voltage >= 11.2) return 'Warning';
+    return 'Critical';
+  };
+
+  const bat1Pct = getBatteryPercent(device.battery_1_voltage);
+  const bat2Pct = getBatteryPercent(device.battery_2_voltage);
 
   return (
     <div 
-      className="card" 
+      className={`telemetry-card ${isOnline ? 'card-online' : 'card-offline'}`}
       onClick={() => navigate(`/device/${device.id}`)}
-      style={{ position: 'relative', overflow: 'hidden', cursor: 'pointer' }}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/device/${device.id}`); }}
     >
-      {/* Top Accent Line */}
-      <div style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        height: '4px',
-        backgroundColor: statusColor,
-        opacity: isOnline ? 1 : 0.5
-      }} />
-
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '4px' }}>
-            <Train size={18} />
-            <span>{device.train_no ? `Train: ${device.train_no}` : 'No Train'}</span>
-            <span style={{ margin: '0 4px', color: 'var(--text-muted)' }}>•</span>
-            <span>{device.coach_no ? `Coach: ${device.coach_no}` : 'No Coach'}</span>
+      {/* 1. Top Status & Fleet Location Header */}
+      <div className="card-top-header">
+        <div className="fleet-badge-group">
+          <div className="fleet-badge train-badge">
+            <Train size={12} className="fleet-badge-icon" />
+            <span>{device.train_no ? `Train ${device.train_no}` : 'Unassigned'}</span>
           </div>
-          <h3 style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-secondary)', margin: '0' }}>
-            {device.name || 'Unnamed Device'}
-          </h3>
+          {device.coach_no && (
+            <div className="fleet-badge coach-badge">
+              <span>{`Coach ${device.coach_no}`}</span>
+            </div>
+          )}
         </div>
-        
-        {/* Status Indicator and Actions */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span className={`status-dot ${isOnline ? 'online' : 'offline'}`} />
-            <span style={{ fontSize: '12px', fontWeight: '600', color: statusColor }}>
-              {isOnline ? 'ONLINE' : 'OFFLINE'}
-            </span>
-          </div>
+
+        <div className="card-status-pill">
+          <span className={`live-pulse-dot ${isOnline ? 'pulse-green' : 'pulse-gray'}`} />
+          <span className="live-status-label">{isOnline ? 'LIVE' : 'OFFLINE'}</span>
           {!hideActions && (
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button 
-                onClick={(e) => { e.stopPropagation(); onEdit(); }}
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
-              >
-                <Edit size={16} />
-              </button>
-              <button 
-                onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--status-red)' }}
-              >
-                <Trash2 size={16} />
-              </button>
+            <div className="card-action-btns" onClick={(e) => e.stopPropagation()}>
+              {onEdit && (
+                <button 
+                  className="icon-action-btn btn-edit"
+                  onClick={(e) => { e.stopPropagation(); onEdit(); }}
+                  title="Edit Device"
+                >
+                  <Edit size={13} />
+                </button>
+              )}
+              {onDelete && (
+                <button 
+                  className="icon-action-btn btn-delete"
+                  onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                  title="Delete Device"
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
             </div>
           )}
         </div>
       </div>
 
-      {/* Telemetry Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
-        
+      {/* 2. Device Identity & Hardware Details */}
+      <div className="device-identity-row">
+        <div className="device-meta-left">
+          <h4 className="device-display-name" title={device.name || 'Monitoring Node'}>
+            {device.name || 'Monitoring Node'}
+          </h4>
+          <div className="device-sub-tags">
+            {device.location && (
+              <span className="device-location-tag">
+                <MapPin size={10} /> {device.location}
+              </span>
+            )}
+            {device.device_type && (
+              <span className="device-type-tag">
+                <Cpu size={10} /> {device.device_type}
+              </span>
+            )}
+          </div>
+        </div>
+        <span className="device-mac-chip" title={`MAC: ${device.mac_address}`}>
+          {device.mac_address}
+        </span>
+      </div>
+
+      {/* 3. Dual Battery Telemetry Gauges */}
+      <div className="battery-telemetry-section">
         {/* Battery 1 */}
-        <div style={{ background: 'var(--bg-primary)', padding: '12px', borderRadius: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '8px' }}>
-            <Battery size={14} /> Battery 1
-          </div>
-          <div style={{ fontSize: '20px', fontWeight: '700' }}>
-            {device.battery_1_voltage ? `${device.battery_1_voltage.toFixed(2)}V` : '--'}
-          </div>
-          {device.battery_1_voltage && (
-            <div style={{ height: '4px', background: '#ddd', borderRadius: '2px', marginTop: '8px', overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${bat1Percent}%`, background: bat1Percent > 20 ? 'var(--status-green)' : 'var(--status-red)' }} />
+        <div className={`battery-gauge-card border-${getVoltageStatusClass(device.battery_1_voltage)}`}>
+          <div className="gauge-header">
+            <div className="gauge-title">
+              <Battery size={13} className="gauge-icon" />
+              <span>Battery 1</span>
             </div>
-          )}
+            <span className={`gauge-voltage ${getVoltageStatusClass(device.battery_1_voltage)}`}>
+              {device.battery_1_voltage !== null && device.battery_1_voltage !== undefined
+                ? `${device.battery_1_voltage.toFixed(2)}V`
+                : '--'}
+            </span>
+          </div>
+          <div className="gauge-track">
+            <div 
+              className={`gauge-fill ${getVoltageStatusClass(device.battery_1_voltage)}`}
+              style={{ width: `${bat1Pct !== null ? bat1Pct : 0}%` }}
+            />
+          </div>
+          <div className="gauge-footer">
+            <span className="gauge-status-label">{getVoltageLabel(device.battery_1_voltage)}</span>
+            <span className="gauge-pct-text">{bat1Pct !== null ? `${bat1Pct}%` : 'Offline'}</span>
+          </div>
         </div>
 
         {/* Battery 2 */}
-        <div style={{ background: 'var(--bg-primary)', padding: '12px', borderRadius: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '8px' }}>
-            <Battery size={14} /> Battery 2
-          </div>
-          <div style={{ fontSize: '20px', fontWeight: '700' }}>
-            {device.battery_2_voltage ? `${device.battery_2_voltage.toFixed(2)}V` : '--'}
-          </div>
-          {device.battery_2_voltage && (
-            <div style={{ height: '4px', background: '#ddd', borderRadius: '2px', marginTop: '8px', overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${bat2Percent}%`, background: bat2Percent > 20 ? 'var(--status-green)' : 'var(--status-red)' }} />
+        <div className={`battery-gauge-card border-${getVoltageStatusClass(device.battery_2_voltage)}`}>
+          <div className="gauge-header">
+            <div className="gauge-title">
+              <Battery size={13} className="gauge-icon" />
+              <span>Battery 2</span>
             </div>
-          )}
+            <span className={`gauge-voltage ${getVoltageStatusClass(device.battery_2_voltage)}`}>
+              {device.battery_2_voltage !== null && device.battery_2_voltage !== undefined
+                ? `${device.battery_2_voltage.toFixed(2)}V`
+                : '--'}
+            </span>
+          </div>
+          <div className="gauge-track">
+            <div 
+              className={`gauge-fill ${getVoltageStatusClass(device.battery_2_voltage)}`}
+              style={{ width: `${bat2Pct !== null ? bat2Pct : 0}%` }}
+            />
+          </div>
+          <div className="gauge-footer">
+            <span className="gauge-status-label">{getVoltageLabel(device.battery_2_voltage)}</span>
+            <span className="gauge-pct-text">{bat2Pct !== null ? `${bat2Pct}%` : 'Offline'}</span>
+          </div>
         </div>
+      </div>
 
-
+      {/* 4. Tactile MCB & AC Switches Grid (Clean, Contained 2x2) */}
+      <div className="telemetry-switches-grid">
         {/* Main MCB */}
-        <div style={{ background: 'var(--bg-primary)', padding: '12px', borderRadius: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '8px' }}>
-            <Power size={14} /> Main MCB
+        <div className={`switch-status-pill switch-${device.main_mcb_status === 'ON' ? 'on' : (device.main_mcb_status === 'OFF' ? 'off' : 'null')}`}>
+          <div className="switch-meta">
+            <Power size={12} />
+            <span>Main MCB</span>
           </div>
-          <div style={{ 
-            fontSize: '14px', 
-            fontWeight: '600',
-            color: device.main_mcb_status === 'ON' ? 'var(--status-green)' : (device.main_mcb_status === 'OFF' ? 'var(--status-red)' : 'inherit')
-          }}>
-            {device.main_mcb_status || '--'}
+          <div className="switch-state-indicator">
+            <span className={`switch-led led-${device.main_mcb_status === 'ON' ? 'on' : (device.main_mcb_status === 'OFF' ? 'off' : 'null')}`} />
+            <span className="switch-val-text">{device.main_mcb_status || 'N/A'}</span>
           </div>
         </div>
 
-        {/* FSDC MCB */}
-        <div style={{ background: 'var(--bg-primary)', padding: '12px', borderRadius: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '8px' }}>
-            <Power size={14} /> FSDC MCB
+        {/* FSDS MCB */}
+        <div className={`switch-status-pill switch-${device.fsds_mcb_status === 'ON' ? 'on' : (device.fsds_mcb_status === 'OFF' ? 'off' : 'null')}`}>
+          <div className="switch-meta">
+            <Power size={12} />
+            <span>FSDS MCB</span>
           </div>
-          <div style={{ 
-            fontSize: '14px', 
-            fontWeight: '600',
-            color: device.fsds_mcb_status === 'ON' ? 'var(--status-green)' : (device.fsds_mcb_status === 'OFF' ? 'var(--status-red)' : 'inherit')
-          }}>
-            {device.fsds_mcb_status || '--'}
+          <div className="switch-state-indicator">
+            <span className={`switch-led led-${device.fsds_mcb_status === 'ON' ? 'on' : (device.fsds_mcb_status === 'OFF' ? 'off' : 'null')}`} />
+            <span className="switch-val-text">{device.fsds_mcb_status || 'N/A'}</span>
           </div>
         </div>
 
-        {/* Battery Status */}
-        <div style={{ background: 'var(--bg-primary)', padding: '12px', borderRadius: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '8px' }}>
-            <Activity size={14} /> Battery Status
+        {/* AC 1 */}
+        <div className={`switch-status-pill switch-${device.ac_1_status === 'ON' ? 'on' : (device.ac_1_status === 'OFF' ? 'off' : 'null')}`}>
+          <div className="switch-meta">
+            <Wind size={12} />
+            <span>AC 1</span>
           </div>
-          <div style={{ 
-            fontSize: '14px', 
-            fontWeight: '600',
-            color: device.battery_status === 'Charging' ? 'var(--status-green)' : 'inherit'
-          }}>
-            {device.battery_status || '--'}
+          <div className="switch-state-indicator">
+            <span className={`switch-led led-${device.ac_1_status === 'ON' ? 'on' : (device.ac_1_status === 'OFF' ? 'off' : 'null')}`} />
+            <span className="switch-val-text">{device.ac_1_status || 'N/A'}</span>
           </div>
         </div>
 
-        {/* Countdown Timer */}
-        <div style={{ background: 'var(--bg-primary)', padding: '12px', borderRadius: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '8px' }}>
-            <Timer size={14} /> Countdown
+        {/* AC 2 */}
+        <div className={`switch-status-pill switch-${device.ac_2_status === 'ON' ? 'on' : (device.ac_2_status === 'OFF' ? 'off' : 'null')}`}>
+          <div className="switch-meta">
+            <Wind size={12} />
+            <span>AC 2</span>
           </div>
-          <div style={{ 
-            fontSize: '18px', 
-            fontWeight: '700',
-            color: 'var(--status-red)'
-          }}>
-            {device.countdown_timer !== undefined && device.countdown_timer !== null ? `${device.countdown_timer}s` : '--'}
+          <div className="switch-state-indicator">
+            <span className={`switch-led led-${device.ac_2_status === 'ON' ? 'on' : (device.ac_2_status === 'OFF' ? 'off' : 'null')}`} />
+            <span className="switch-val-text">{device.ac_2_status || 'N/A'}</span>
           </div>
         </div>
-
       </div>
 
-      {/* Footer / Last Updated */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '12px', borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '16px' }}>
-        <Clock size={12} />
-        <span>Updated {lastSeenText}</span>
-      </div>
+      {/* 5. Live Heartbeat, Countdown Timer & Navigation */}
+      <div className="telemetry-card-footer">
+        <div className="footer-meta-item" title="Telemetry Heartbeat">
+          <Clock size={12} className="footer-icon" />
+          <span>{lastSeenText}</span>
+        </div>
 
+        {device.countdown_timer !== undefined && device.countdown_timer !== null && (
+          <div className="footer-meta-item timer-pill" title="Hardware Refresh Countdown Timer">
+            <Timer size={12} className="footer-icon" />
+            <span>{`${device.countdown_timer}s`}</span>
+          </div>
+        )}
+
+        <div className="footer-view-more">
+          <span>View Telemetry</span>
+          <ChevronRight size={13} className="chevron-slide" />
+        </div>
+      </div>
     </div>
   );
 };
