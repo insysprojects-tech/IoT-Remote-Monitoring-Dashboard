@@ -5,7 +5,7 @@ Loads settings from environment variables (.env file).
 """
 
 import json
-from typing import Optional
+from typing import Optional, Union
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
     # --- CORS ---
-    CORS_ORIGINS: list[str] = [
+    CORS_ORIGINS: Union[list[str], str] = [
         "http://localhost:5173",
         "http://localhost:3000",
         "http://127.0.0.1:5173",
@@ -70,10 +70,10 @@ class Settings(BaseSettings):
         "http://127.0.0.1:8000",
     ]
 
-    @field_validator("CORS_ORIGINS", mode="before")
+    @field_validator("CORS_ORIGINS", mode="after")
     @classmethod
     def parse_cors_origins(cls, v):
-        """Allow CORS origins as JSON list string or comma-separated string."""
+        """Allow CORS origins as JSON list string, single string, or comma-separated string."""
         if isinstance(v, str):
             v = v.strip()
             if v.startswith("[") and v.endswith("]"):
