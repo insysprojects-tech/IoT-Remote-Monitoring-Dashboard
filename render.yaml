@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: iot-monitoring-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DEBUG
+        value: "false"
+      - key: DATABASE_URL
+        sync: false
+      - key: MQTT_BROKER_HOST
+        value: "j18eff7a.ala.asia-southeast1.emqxsl.com"
+      - key: MQTT_BROKER_PORT
+        value: "8883"
+      - key: MQTT_USERNAME
+        sync: false
+      - key: MQTT_PASSWORD
+        sync: false
+      - key: MQTT_TOPIC_PATTERN
+        value: "test/devices/+/power"
+      - key: MQTT_USE_TLS
+        value: "true"
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: "http://localhost:3000"
+      - key: TELEMETRY_RETENTION_HOURS
+        value: "24"
+      - key: CLEANUP_INTERVAL_MINUTES
+        value: "60"
+      - key: ENABLE_APP_RETENTION_CLEANUP
+        value: "true"
