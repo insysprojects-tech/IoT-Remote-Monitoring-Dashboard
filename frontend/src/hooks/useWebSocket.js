@@ -11,10 +11,15 @@ import { useAlertStore } from '../store/alertStore';
 export const getResolvedWsUrl = () => {
   let wsUrl = import.meta.env.VITE_WS_BASE_URL;
 
-  // If explicitly set, sanitize protocol if user mistakenly used http/https
+  // If explicitly set, sanitize protocol if user mistakenly used http/https or duplicated schemes (e.g. wss://https://)
   if (wsUrl && typeof wsUrl === 'string' && wsUrl.trim()) {
     wsUrl = wsUrl.trim();
-    if (wsUrl.startsWith('https://')) {
+    // Clean up accidental duplicate prefixes like wss://https:// or ws://http://
+    if (wsUrl.startsWith('wss://https://')) {
+      wsUrl = 'wss://' + wsUrl.slice(14);
+    } else if (wsUrl.startsWith('ws://http://')) {
+      wsUrl = 'ws://' + wsUrl.slice(12);
+    } else if (wsUrl.startsWith('https://')) {
       wsUrl = 'wss://' + wsUrl.slice(8);
     } else if (wsUrl.startsWith('http://')) {
       wsUrl = 'ws://' + wsUrl.slice(7);

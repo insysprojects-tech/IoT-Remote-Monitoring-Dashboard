@@ -74,15 +74,31 @@ class Settings(BaseSettings):
     @classmethod
     def parse_cors_origins(cls, v):
         """Allow CORS origins as JSON list string, single string, or comma-separated string."""
+        origins = []
         if isinstance(v, str):
             v = v.strip()
             if v.startswith("[") and v.endswith("]"):
                 try:
-                    return json.loads(v)
+                    origins = json.loads(v)
                 except Exception:
-                    pass
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return v
+                    origins = [origin.strip() for origin in v.split(",") if origin.strip()]
+            else:
+                origins = [origin.strip() for origin in v.split(",") if origin.strip()]
+        elif isinstance(v, list):
+            origins = list(v)
+
+        # Always include both localhost and 127.0.0.1 variants for local testing
+        dev_origins = [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ]
+        for dev_origin in dev_origins:
+            if dev_origin not in origins:
+                origins.append(dev_origin)
+
+        return origins
 
     # --- Device Offline Detection ---
     DEVICE_OFFLINE_TIMEOUT: int = 120  # Seconds without data before marking offline
