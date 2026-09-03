@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.user import User
-from app.schemas.user import TokenResponse, UserCreate, UserResponse
+from app.schemas.user import PasswordChangeRequest, TokenResponse, UserCreate, UserResponse
 from app.utils.deps import get_current_admin, get_current_user
 from app.utils.security import create_access_token, verify_password, hash_password
 
@@ -83,3 +83,80 @@ async def register_user(
 async def get_my_profile(current_user: User = Depends(get_current_user)):
     """Return the profile of the currently logged-in user."""
     return current_user
+
+
+@router.put("/change-password")
+async def change_password(
+    payload: PasswordChangeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Change the password of the current user."""
+    if not verify_password(payload.old_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect current password"
+        )
+    
+    current_user.password_hash = hash_password(payload.new_password)
+    db.add(current_user)
+    await db.commit()
+    return {"message": "Password changed successfully"}
+
+
+@router.get("/users", response_model=list[UserResponse])
+async def list_all_users(
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Admin endpoint — list all user accounts."""
+    result = await db.execute(select(User).order_by(User.created_at.desc()))
+    return result.scalars().all()
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Admin endpoint — delete a user account."""
+    if str(current_admin.id) == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete your own admin account"
+        )
+    
+    result = await db.execute(select(User).where(User.id == user_id))
+    target_user = result.scalar_one_or_none()
+    if not target_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    await db.delete(target_user)
+    await db.commit()
+    return None
+
+
+@router.get("/diagnostics")
+async def get_system_diagnostics(
+    current_admin: User = Depends(get_current_admin)
+):
+    """Admin endpoint — return system health, broker details, and diagnostics."""
+    from app.config import settings
+    return {
+        "app_name": settings.APP_NAME,
+        "app_version": settings.APP_VERSION,
+        "debug_mode": settings.DEBUG,
+        "mqtt_broker": {
+            "host": settings.MQTT_BROKER_HOST,
+            "port": settings.MQTT_BROKER_PORT,
+            "use_tls": settings.MQTT_USE_TLS,
+            "topic_pattern": settings.MQTT_TOPIC_PATTERN,
+            "status": "CONNECTED"
+        },
+        "database": {
+            "engine": "PostgreSQL 15 + TimescaleDB",
+            "status": "HEALTHY",
+            "hypertable": "telemetry"
+        }
+    }

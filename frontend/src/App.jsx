@@ -6,6 +6,7 @@ import { LoginPage } from './components/auth/LoginPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { AlertRulesPage } from './components/alerts/AlertRulesPage';
 import { ManageDevicesPage } from './components/device/ManageDevicesPage';
+import { SettingsPage } from './components/settings/SettingsPage';
 import { ToastContainer } from './components/alerts/Toast';
 import './index.css';
 
@@ -24,6 +25,7 @@ function App() {
                   <Route path="/manage-devices" element={<ManageDevicesPage />} />
                   <Route path="/device/:id" element={<DeviceDetail />} />
                   <Route path="/alerts" element={<AlertRulesPage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
                 </Routes>
               </AppLayout>
               <ToastContainer />

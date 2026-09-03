@@ -37,6 +37,12 @@ class UserResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PasswordChangeRequest(BaseModel):
+    """Change password request."""
+    old_password: str
+    new_password: str = Field(..., min_length=6)
+
+
 class TokenResponse(BaseModel):
     """JWT token returned after successful login."""
 

@@ -40,7 +40,8 @@ export const useAuthStore = create((set) => ({
       });
 
       if (!res.ok) {
-        throw new Error('Invalid credentials');
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || 'Invalid username or password');
       }
 
       const data = await res.json();

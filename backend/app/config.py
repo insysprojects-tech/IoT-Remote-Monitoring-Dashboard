@@ -4,8 +4,10 @@ IoT Remote Monitoring Dashboard — Backend Configuration
 Loads settings from environment variables (.env file).
 """
 
-from pydantic_settings import BaseSettings
+import json
 from typing import Optional
+from pydantic import field_validator
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -18,6 +20,32 @@ class Settings(BaseSettings):
 
     # --- Database ---
     DATABASE_URL: str = "postgresql+asyncpg://iotdash:iotdash_dev@localhost:5433/iotdash_db"
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def normalize_database_url(cls, v: str) -> str:
+        """
+        Normalize database URL for asyncpg and Supabase compatibility:
+        - Automatically prefix postgresql+asyncpg:// if standard postgres:// or postgresql:// is provided.
+        - Handle sslmode query params (asyncpg uses ssl=require instead of sslmode=require).
+        """
+        if not isinstance(v, str):
+            return v
+        url = v.strip()
+        if url.startswith("postgres://"):
+            url = "postgresql+asyncpg://" + url[len("postgres://"):]
+        elif url.startswith("postgresql://"):
+            url = "postgresql+asyncpg://" + url[len("postgresql://"):]
+        
+        # Replace sslmode with ssl for asyncpg compatibility
+        if "sslmode=require" in url:
+            url = url.replace("sslmode=require", "ssl=require")
+        elif "sslmode=prefer" in url:
+            url = url.replace("sslmode=prefer", "ssl=prefer")
+        elif "sslmode=disable" in url:
+            url = url.replace("sslmode=disable", "ssl=disable")
+            
+        return url
 
     # --- MQTT ---
     MQTT_BROKER_HOST: str = "j18eff7a.ala.asia-southeast1.emqxsl.com"
@@ -33,14 +61,40 @@ class Settings(BaseSettings):
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
     # --- CORS ---
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ]
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v):
+        """Allow CORS origins as JSON list string or comma-separated string."""
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("[") and v.endswith("]"):
+                try:
+                    return json.loads(v)
+                except Exception:
+                    pass
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
     # --- Device Offline Detection ---
     DEVICE_OFFLINE_TIMEOUT: int = 120  # Seconds without data before marking offline
     DEVICE_OFFLINE_CHECK_INTERVAL: int = 30  # How often to check for offline devices
 
+    # --- Data Retention (Supabase Free Tier Safety) ---
+    TELEMETRY_RETENTION_HOURS: int = 24  # Keep last 24 hours of telemetry
+    CLEANUP_INTERVAL_MINUTES: int = 60  # Run retention cleanup every hour
+    ENABLE_APP_RETENTION_CLEANUP: bool = True  # Backup retention task in FastAPI
+
     model_config = {
-        "env_file": "../.env",
+        "env_file": (".env", "../.env"),
         "env_file_encoding": "utf-8",
         "case_sensitive": True,
         "extra": "ignore",
@@ -48,3 +102,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+

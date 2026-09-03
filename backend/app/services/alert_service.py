@@ -13,13 +13,14 @@ import operator as op
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional
 
-from sqlalchemy import select, update, func
+from sqlalchemy import select, update, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import async_session
 from app.models.alert_rule import AlertRule
 from app.models.alert_event import AlertEvent
 from app.models.device import Device
+from app.models.telemetry import Telemetry
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,7 @@ class AlertService:
     def __init__(self):
         self._broadcast_callback: Optional[Callable] = None
         self._offline_task: Optional[asyncio.Task] = None
+        self._cleanup_task: Optional[asyncio.Task] = None
         self._running = False
         # Cooldown tracking: (rule_id) -> last_triggered_at
         # Prevents spamming alerts for the same rule
@@ -170,13 +172,19 @@ class AlertService:
                 await self._broadcast_callback(alert_data)
 
     async def start_offline_detection(self):
-        """Start the background task that detects offline devices."""
+        """Start the background task that detects offline devices and purges old telemetry."""
         self._running = True
         self._offline_task = asyncio.create_task(self._offline_detection_loop())
         logger.info("Device offline detection started")
 
+        if settings.ENABLE_APP_RETENTION_CLEANUP:
+            self._cleanup_task = asyncio.create_task(self._retention_cleanup_loop())
+            logger.info(
+                f"Telemetry retention cleanup started (keeping last {settings.TELEMETRY_RETENTION_HOURS}h, runs every {settings.CLEANUP_INTERVAL_MINUTES}m)"
+            )
+
     async def stop_offline_detection(self):
-        """Stop the offline detection loop."""
+        """Stop background tasks."""
         self._running = False
         if self._offline_task:
             self._offline_task.cancel()
@@ -184,7 +192,13 @@ class AlertService:
                 await self._offline_task
             except asyncio.CancelledError:
                 pass
-        logger.info("Device offline detection stopped")
+        if self._cleanup_task:
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
+        logger.info("Background detection and retention services stopped")
 
     async def _offline_detection_loop(self):
         """
@@ -239,6 +253,43 @@ class AlertService:
             if stale_devices:
                 await session.commit()
 
+    async def _retention_cleanup_loop(self):
+        """
+        Periodically purge telemetry older than TELEMETRY_RETENTION_HOURS (default 24h).
+        Protects the Supabase 500 MB free tier limit from overflowing.
+        """
+        interval_seconds = max(60, settings.CLEANUP_INTERVAL_MINUTES * 60)
+        # Initial wait of 30 seconds after boot before running the first cleanup
+        await asyncio.sleep(30)
+
+        while self._running:
+            try:
+                await self._purge_old_telemetry()
+                await asyncio.sleep(interval_seconds)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in telemetry retention cleanup: {e}")
+                await asyncio.sleep(60)
+
+    async def _purge_old_telemetry(self):
+        """Delete telemetry older than configured retention period."""
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.TELEMETRY_RETENTION_HOURS)
+        async with async_session() as session:
+            try:
+                stmt = delete(Telemetry).where(Telemetry.time < cutoff)
+                result = await session.execute(stmt)
+                await session.commit()
+                deleted_rows = result.rowcount
+                if deleted_rows > 0:
+                    logger.info(
+                        f"🧹 [Data Retention] Purged {deleted_rows} telemetry records older than {settings.TELEMETRY_RETENTION_HOURS}h"
+                    )
+            except Exception as e:
+                await session.rollback()
+                logger.warning(f"Telemetry retention cleanup query encountered an issue: {e}")
+
 
 # Singleton instance
 alert_service = AlertService()
+

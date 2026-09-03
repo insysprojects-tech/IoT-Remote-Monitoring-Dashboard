@@ -82,7 +82,7 @@ export const Sidebar = () => {
             </span>
           )}
         </button>
-        <button onClick={() => {}} style={navLinkStyle('/settings')}>
+        <button onClick={() => navigate('/settings')} style={navLinkStyle('/settings')}>
           <Settings size={20} />
           Settings
         </button>

@@ -9,12 +9,16 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.config import settings
 
-# Async engine — connection pool to PostgreSQL
+# Async engine — connection pool to PostgreSQL / Supabase
+# statement_cache_size=0 ensures compatibility with Supabase poolers (Supavisor / pgbouncer)
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,
-    pool_size=10,
-    max_overflow=20,
+    connect_args={"statement_cache_size": 0},
+    pool_size=5,
+    max_overflow=5,
+    pool_recycle=300,
+    pool_pre_ping=True,
 )
 
 # Session factory — creates new sessions for each request

@@ -1,278 +1,259 @@
-#define TINY_GSM_MODEM_SIM7600
-#define TINY_GSM_RX_BUFFER 1024
+/*
+ * ============================================================================
+ * IoT Remote Monitoring Dashboard — ESP32 WiFi Firmware
+ * ============================================================================
+ * 
+ * Hardware: ESP32 / ESP32-S3 Dev Module
+ * Transport: WiFi (WPA2) + MQTT over TLS/SSL (Port 8883)
+ * Broker: EMQX Cloud (j18eff7a.ala.asia-southeast1.emqxsl.com)
+ * Dynamic Topic: test/devices/{MAC_ADDRESS}/power
+ * 
+ * Target Network:
+ *   - SSID:     "Goog"
+ *   - Password: "iiitchaipiyo"
+ * ============================================================================
+ */
 
-#include <TinyGsmClient.h>
+#include <Arduino.h>
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <PubSubClient.h>
 
-#define SerialMon Serial
-#define SerialAT Serial1
-#define MODEM_RX_PIN 17
-#define MODEM_TX_PIN 18
-#define MODEM_PWRKEY_PIN 4
+// ============================================================================
+// CONFIGURATION: WiFi & Cloud MQTT
+// ============================================================================
 
-const char apn[] = "jionet";
+// --- WiFi Credentials ---
+const char* ssid     = "Goog";
+const char* password = "iiitchaipiyo";
 
-// --- EMQX Cloud Settings ---
-const char* mqtt_server = "j18eff7a.ala.asia-southeast1.emqxsl.com";
-const int mqtt_port = 8883;
+// --- EMQX Cloud MQTT Settings ---
+const char* mqtt_server   = "j18eff7a.ala.asia-southeast1.emqxsl.com";
+const int   mqtt_port     = 8883;       // TLS/SSL Secure Port
 const char* mqtt_username = "test1";
 const char* mqtt_password = "test1";
-const char* mqtt_topic = "test/devices/{MAC_ADDRESS}/power";
-const char* mqtt_client_id = "ESP32-SIM7670-Dashboard";
 
-TinyGsm modem(SerialAT);
+// --- Device MAC & Topic Configuration ---
+// Leave empty ("") to automatically derive identity from the hardware WiFi MAC
+// Or specify a custom MAC string if you want to test against a registered device
+const char* CUSTOM_MAC_OVERRIDE = ""; 
 
-// --- Sensor Pins ---
-const int BATTERY_PIN = 7, VOLTAGE_SENSOR_2_PIN = 6, HW122_1_VOUT_PIN = 5, HW122_2_VOUT_PIN = 8;
-float R1 = 30000, R2 = 7500, calibration_factor = 1.0245;
+char macAddress[20]   = "";
+char mqtt_topic[128]  = "";
+char mqtt_client_id[64] = "";
 
-// Base interval of 3 seconds (3000 ms)
-const unsigned long BASE_INTERVAL = 3000; 
+// ============================================================================
+// SENSOR CONFIGURATION & PINS
+// ============================================================================
+
+// --- ADC Sensor Pins ---
+const int BATTERY_PIN            = 7;  // Battery 1 Voltage Divider ADC
+const int VOLTAGE_SENSOR_2_PIN   = 6;  // Battery 2 Voltage Divider ADC
+const int HW122_1_VOUT_PIN       = 5;  // AC Line 1 HW-122 Module ADC
+const int HW122_2_VOUT_PIN       = 8;  // AC Line 2 HW-122 Module ADC
+
+// Set to true if testing without physical sensor hardware connected
+// This will generate realistic live demo telemetry (11.5V - 13.5V & AC ON/OFF)
+#define SIMULATE_SENSORS false
+
+// Voltage divider calibration constants
+const float ADC_REF_VOLTAGE    = 3.3;
+const float ADC_RESOLUTION     = 4095.0;
+const float VOLTAGE_DIVIDER_RATIO = 5.0; // Ratio for standard 25V voltage sensors
+
+// ============================================================================
+// TIMING & PUBLISH INTERVALS
+// ============================================================================
+
+const unsigned long BASE_INTERVAL = 3000;  // 3 seconds base interval
 unsigned long lastPublishTime = 0;
 long currentJitter = 0;
+unsigned long lastReconnectAttempt = 0;
 
-// Helper: send AT command and print response for debugging
-bool sendATCommand(const char* cmd, const char* expectedResp, unsigned long timeout = 5000) {
-  SerialAT.println(cmd);
-  unsigned long start = millis();
-  String response = "";
-  while (millis() - start < timeout) {
-    while (SerialAT.available()) {
-      char c = SerialAT.read();
-      response += c;
-    }
-    if (response.indexOf(expectedResp) != -1) {
-      Serial.print("  >> "); Serial.println(response);
-      return true;
-    }
-    if (response.indexOf("ERROR") != -1) {
-      Serial.print("  >> ERROR: "); Serial.println(response);
-      return false;
-    }
+// ============================================================================
+// CLIENTS & HANDLERS
+// ============================================================================
+
+WiFiClientSecure espClient;
+PubSubClient client(espClient);
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+void setupIdentity() {
+  if (strlen(CUSTOM_MAC_OVERRIDE) > 0) {
+    strncpy(macAddress, CUSTOM_MAC_OVERRIDE, sizeof(macAddress) - 1);
+  } else {
+    String mac = WiFi.macAddress();
+    strncpy(macAddress, mac.c_str(), sizeof(macAddress) - 1);
   }
-  Serial.print("  >> TIMEOUT: "); Serial.println(response);
-  return false;
+
+  // Construct Dynamic Topic: test/devices/{MAC}/power
+  snprintf(mqtt_topic, sizeof(mqtt_topic), "test/devices/%s/power", macAddress);
+  
+  // Construct Unique Client ID: ESP32-WiFi-{MAC}
+  snprintf(mqtt_client_id, sizeof(mqtt_client_id), "ESP32-WiFi-%s", macAddress);
 }
 
-void powerOn() {
-  Serial.println("\n[Power] Powering on modem...");
-  pinMode(MODEM_PWRKEY_PIN, OUTPUT);
-  digitalWrite(MODEM_PWRKEY_PIN, LOW); delay(100);
-  digitalWrite(MODEM_PWRKEY_PIN, HIGH); delay(1000);
-  digitalWrite(MODEM_PWRKEY_PIN, LOW);
-  Serial.println("[Power] Waiting 8 seconds for modem boot...");
-  delay(8000);
-}
+void connectWiFi() {
+  if (WiFi.status() == WL_CONNECTED) return;
 
-bool connectNetwork() {
-  Serial.println("[Net] Initializing SerialAT...");
-  SerialAT.begin(115200, SERIAL_8N1, MODEM_RX_PIN, MODEM_TX_PIN);
+  Serial.println("\n[WiFi] Connecting to network: " + String(ssid));
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
 
-  Serial.print("[Net] Waiting for AT response");
-  while (!modem.testAT()) { Serial.print("."); delay(1000); }
-  Serial.println(" OK!");
-
-  Serial.println("[Net] Initializing modem...");
-  modem.init();
-
-  // Set default EPS bearer APN for Jio
-  Serial.println("[Net] Setting EPS bearer APN...");
-  modem.sendAT(GF("+CGDCONT=1,\"IP\",\"jionet\""));
-  modem.waitResponse();
-
-  // LTE only mode
-  Serial.println("[Net] Setting LTE-only mode...");
-  modem.setNetworkMode(38);
-
-  Serial.println("[Net] Waiting for network (up to 3 mins)...");
-  if (!modem.waitForNetwork(180000L, true)) {
-    Serial.println("[Net] ERROR: Network registration failed.");
-    return false;
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 30) {
+    delay(500);
+    Serial.print(".");
+    attempts++;
   }
-  Serial.println("[Net] Network registered!");
 
-  Serial.println("[Net] Activating PDP context for data...");
-  // For native MQTT, the modem manages its own data connection.
-  // We activate PDP context manually with AT commands.
-  modem.sendAT(GF("+CGACT=1,1"));
-  if (modem.waitResponse(30000L) != 1) {
-    Serial.println("[Net] WARNING: PDP activation returned non-OK, trying GPRS fallback...");
-    if (!modem.gprsConnect(apn, "", "")) {
-      Serial.println("[Net] WARNING: GPRS also failed, continuing anyway for native MQTT...");
-    }
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\n[WiFi] Connected successfully!");
+    Serial.print("[WiFi] IP Address: ");
+    Serial.println(WiFi.localIP());
+    Serial.print("[WiFi] Signal Strength (RSSI): ");
+    Serial.print(WiFi.RSSI());
+    Serial.println(" dBm");
+  } else {
+    Serial.println("\n[WiFi] Connection timed out. Will retry in main loop.");
   }
-  
-  // Check what IP we got
-  modem.sendAT(GF("+CGPADDR=1"));
-  modem.waitResponse();
-  
-  Serial.print("[Net] Local IP: ");
-  Serial.println(modem.getLocalIP());
-  Serial.println("[Net] Network setup complete!");
-  return true;
 }
 
 bool connectMQTT() {
-  Serial.println("\n[MQTT] Setting up modem's native MQTT client over SSL...");
+  if (client.connected()) return true;
 
-  // Full cleanup of any previous MQTT session
-  Serial.println("[MQTT] Cleaning up previous sessions...");
-  sendATCommand("AT+CMQTTDISC=0,60", "OK", 5000);
-  delay(500);
-  sendATCommand("AT+CMQTTREL=0", "OK", 3000);
-  delay(500);
-  sendATCommand("AT+CMQTTSTOP", "OK", 5000);
-  delay(2000);
+  Serial.println("\n[MQTT] Connecting to EMQX Broker: " + String(mqtt_server) + ":" + String(mqtt_port));
+  Serial.println("[MQTT] Client ID: " + String(mqtt_client_id));
+  Serial.println("[MQTT] Publishing Topic: " + String(mqtt_topic));
 
-  // Configure SSL: TLS 1.2, no certificate verification
-  Serial.println("[MQTT] Configuring SSL...");
-  sendATCommand("AT+CSSLCFG=\"sslversion\",0,4", "OK", 3000);
-  sendATCommand("AT+CSSLCFG=\"authmode\",0,0", "OK", 3000);
-  sendATCommand("AT+CSSLCFG=\"enableSNI\",0,1", "OK", 3000);
-
-  // Start MQTT service
-  Serial.println("[MQTT] Starting MQTT service...");
-  if (!sendATCommand("AT+CMQTTSTART", "+CMQTTSTART: 0", 10000)) {
-    Serial.println("[MQTT] WARNING: CMQTTSTART may have already been started.");
-  }
-  delay(1000);
-
-  // Acquire client with SSL enabled (servertype=1 for SSL)
-  // Use a short, simple client ID to avoid issues
-  Serial.println("[MQTT] Acquiring MQTT client (SSL mode)...");
-  if (!sendATCommand("AT+CMQTTACCQ=0,\"ESP32Client\",1", "OK", 5000)) {
-    Serial.println("[MQTT] Retrying without SSL flag...");
-    if (!sendATCommand("AT+CMQTTACCQ=0,\"ESP32Client\"", "OK", 5000)) {
-      Serial.println("[MQTT] ERROR: CMQTTACCQ failed completely.");
-      return false;
-    }
-  }
-  delay(500);
-
-  // Set SSL context for MQTT
-  Serial.println("[MQTT] Linking SSL config to MQTT...");
-  sendATCommand("AT+CMQTTSSLCFG=0,0", "OK", 3000);
-  delay(500);
-
-  // Connect to EMQX broker with username/password
-  Serial.println("[MQTT] Connecting to EMQX broker...");
-  char connCmd[256];
-  snprintf(connCmd, sizeof(connCmd),
-           "AT+CMQTTCONNECT=0,\"tcp://%s:%d\",60,1,\"%s\",\"%s\"",
-           mqtt_server, mqtt_port, mqtt_username, mqtt_password);
-  if (!sendATCommand(connCmd, "+CMQTTCONNECT: 0,0", 30000)) {
-    Serial.println("[MQTT] ERROR: CMQTTCONNECT failed.");
+  if (client.connect(mqtt_client_id, mqtt_username, mqtt_password)) {
+    Serial.println("[MQTT] Connected to EMQX Cloud successfully (TLS/SSL)! 🚀");
+    return true;
+  } else {
+    Serial.print("[MQTT] Connection failed, rc=");
+    Serial.print(client.state());
+    Serial.println(" (Will retry in 5s)");
     return false;
   }
-
-  Serial.println("[MQTT] Connected to EMQX successfully!");
-  return true;
 }
 
-bool publishMQTT(const char* topic, const char* payload) {
-  // Set topic
-  char topicCmd[128];
-  snprintf(topicCmd, sizeof(topicCmd), "AT+CMQTTTOPIC=0,%d", strlen(topic));
-  SerialAT.println(topicCmd);
-  delay(500);
-  SerialAT.write(topic);
-  delay(500);
-
-  // Read response
-  String resp = "";
-  unsigned long start = millis();
-  while (millis() - start < 3000) {
-    while (SerialAT.available()) resp += (char)SerialAT.read();
-    if (resp.indexOf("OK") != -1) break;
-  }
-
-  // Set payload
-  char payloadCmd[128];
-  snprintf(payloadCmd, sizeof(payloadCmd), "AT+CMQTTPAYLOAD=0,%d", strlen(payload));
-  SerialAT.println(payloadCmd);
-  delay(500);
-  SerialAT.write(payload);
-  delay(500);
-
-  resp = "";
-  start = millis();
-  while (millis() - start < 3000) {
-    while (SerialAT.available()) resp += (char)SerialAT.read();
-    if (resp.indexOf("OK") != -1) break;
-  }
-
-  // Publish (QoS 0, timeout 60s)
-  if (!sendATCommand("AT+CMQTTPUB=0,0,60", "+CMQTTPUB: 0,0", 10000)) {
-    Serial.println("[Publish] ERROR: Publish failed.");
-    return false;
-  }
-  return true;
-}
+// ============================================================================
+// ARDUINO SETUP
+// ============================================================================
 
 void setup() {
   Serial.begin(115200);
-  delay(3000);
+  delay(2000);
 
-  Serial.println("\n=============================================");
-  Serial.println("  ESP32-S3 SIM7670 Native MQTT+SSL Dashboard");
-  Serial.println("=============================================");
+  Serial.println("\n=================================================");
+  Serial.println("  ESP32 WiFi Remote Monitoring Dashboard Client");
+  Serial.println("=================================================");
 
-  // Read an unconnected analog pin to generate a truly random seed
-  randomSeed(analogRead(0)); 
+  // Seed random generator with floating analog pin noise
+  randomSeed(analogRead(0));
+  currentJitter = random(0, 2000);
 
-  // Initial random stagger (0 to 3000ms) so devices scatter immediately on boot
-  currentJitter = random(0, 3000); 
+  // Initialize WiFi & Device Identity
+  WiFi.mode(WIFI_STA);
+  setupIdentity();
 
-  powerOn();
+  Serial.print("[Device] MAC Address  : "); Serial.println(macAddress);
+  Serial.print("[Device] Target Topic : "); Serial.println(mqtt_topic);
 
-  if (!connectNetwork()) {
-    Serial.println("[Setup] Network failed. Halting.");
-    while (1) delay(1000);
+  // Connect to WiFi
+  connectWiFi();
+
+  // Configure Secure TLS Client
+  // setInsecure() allows TLS connection without local CA certificate bundle (standard for EMQX Cloud tests)
+  espClient.setInsecure();
+  client.setServer(mqtt_server, mqtt_port);
+  client.setBufferSize(512); // Ensure buffer fits JSON payload + topic
+
+  // Initial MQTT connect
+  if (WiFi.status() == WL_CONNECTED) {
+    connectMQTT();
   }
 
-  if (!connectMQTT()) {
-    Serial.println("[Setup] MQTT failed. Halting.");
-    while (1) delay(1000);
-  }
-
-  Serial.println("[Setup] All systems ready. Entering loop...\n");
+  Serial.println("[Setup] All systems initialized. Starting telemetry loop...\n");
 }
 
+// ============================================================================
+// ARDUINO MAIN LOOP
+// ============================================================================
+
 void loop() {
-  // Drain any async modem output
-  while (SerialAT.available()) {
-    Serial.write(SerialAT.read());
+  unsigned long now = millis();
+
+  // 1. Maintain WiFi Connection
+  if (WiFi.status() != WL_CONNECTED) {
+    if (now - lastReconnectAttempt > 5000) {
+      lastReconnectAttempt = now;
+      connectWiFi();
+    }
+    return;
   }
 
-  unsigned long currentTime = millis();
+  // 2. Maintain MQTT Connection
+  if (!client.connected()) {
+    if (now - lastReconnectAttempt > 5000) {
+      lastReconnectAttempt = now;
+      connectMQTT();
+    }
+  } else {
+    client.loop();
+  }
 
-  // Fire only when base interval + random jitter has elapsed
-  if (currentTime - lastPublishTime >= (BASE_INTERVAL + currentJitter)) {
-    // 1. Read and Calculate Battery Voltages
-    float battery1Voltage = (analogRead(BATTERY_PIN) / 4095.0) * 3.3 * 5.0;
-    float battery2Voltage = (analogRead(VOLTAGE_SENSOR_2_PIN) / 4095.0) * 3.3 * 5.0;
+  // 3. Telemetry Publishing Cycle
+  if (now - lastPublishTime >= (BASE_INTERVAL + currentJitter)) {
+    float battery1Voltage = 0.0;
+    float battery2Voltage = 0.0;
+    String ac1Status = "OFF";
+    String ac2Status = "OFF";
 
-    // 2. Read AC Power Statuses
-    String ac1Status = (analogRead(HW122_1_VOUT_PIN) > 2000) ? "ON" : "OFF";
-    String ac2Status = (analogRead(HW122_2_VOUT_PIN) > 2000) ? "ON" : "OFF";
+#if SIMULATE_SENSORS
+    // Simulation Mode for Bench Testing
+    battery1Voltage = 12.20 + ((float)random(0, 120) / 100.0); // 12.20V - 13.40V
+    battery2Voltage = 11.90 + ((float)random(0, 90) / 100.0);  // 11.90V - 12.80V
+    ac1Status = (random(0, 10) > 1) ? "ON" : "OFF";            // 90% ON
+    ac2Status = (random(0, 10) > 3) ? "ON" : "OFF";            // 70% ON
+#else
+    // Actual Hardware ADC Pin Readings
+    battery1Voltage = (analogRead(BATTERY_PIN) / ADC_RESOLUTION) * ADC_REF_VOLTAGE * VOLTAGE_DIVIDER_RATIO;
+    battery2Voltage = (analogRead(VOLTAGE_SENSOR_2_PIN) / ADC_RESOLUTION) * ADC_REF_VOLTAGE * VOLTAGE_DIVIDER_RATIO;
 
-    // 3. Create JSON Payload with all parameters
+    ac1Status = (analogRead(HW122_1_VOUT_PIN) > 2000) ? "ON" : "OFF";
+    ac2Status = (analogRead(HW122_2_VOUT_PIN) > 2000) ? "ON" : "OFF";
+#endif
+
+    // 4. Construct JSON Payload
     char payload[256];
     snprintf(payload, sizeof(payload),
              "{\"battery_1_voltage\":%.2f,\"battery_2_voltage\":%.2f,\"ac_1_status\":\"%s\",\"ac_2_status\":\"%s\"}",
              battery1Voltage, battery2Voltage, ac1Status.c_str(), ac2Status.c_str());
 
-    Serial.print("[Publish] Sending: ");
+    // 5. Transmit Payload via MQTT
+    Serial.print("[Publish] Topic: ");
+    Serial.print(mqtt_topic);
+    Serial.print(" | Payload: ");
     Serial.print(payload);
 
-    if (publishMQTT(mqtt_topic, payload)) {
-      Serial.println(" -> OK");
+    if (client.connected()) {
+      bool success = client.publish(mqtt_topic, payload);
+      if (success) {
+        Serial.println(" -> ✅ SUCCESS");
+      } else {
+        Serial.println(" -> ❌ FAILED (Publish Error)");
+      }
     } else {
-      Serial.println(" -> FAILED");
+      Serial.println(" -> ⚠️ SKIPPED (MQTT Offline)");
     }
 
-    lastPublishTime = currentTime;
+    lastPublishTime = now;
 
-    // Generate a new offset between -500ms and +500ms for the next cycle
+    // Introduce randomized jitter (-500ms to +500ms) to prevent burst synchronization
     currentJitter = random(-500, 500);
   }
 }

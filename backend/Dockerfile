@@ -20,6 +20,9 @@ RUN pip wheel --no-cache-dir --no-deps --wheel-dir /app/wheels -r requirements.t
 # Stage 2: Runtime
 FROM python:3.11-slim
 
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
 WORKDIR /app
 
 # Copy wheels from builder and install
@@ -30,8 +33,9 @@ RUN pip install --no-cache /wheels/*
 # Copy application code
 COPY . .
 
-# Expose port
+# Expose port (default 8000, Koyeb dynamically provides $PORT)
 EXPOSE 8000
 
-# Command to run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Command to run the application with dynamic PORT fallback
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+
