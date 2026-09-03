@@ -1,7 +1,11 @@
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+import { useWebSocket } from '../../hooks/useWebSocket';
 
 export const AppLayout = ({ children }) => {
+  // Global persistent WebSocket connection across all dashboard pages
+  useWebSocket();
+
   return (
     <div className="app-container">
       <Sidebar />

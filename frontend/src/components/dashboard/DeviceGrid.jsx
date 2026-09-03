@@ -2,7 +2,6 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useDeviceStore } from '../../store/deviceStore';
 import { DeviceCard } from './DeviceCard';
 import { DashboardStats } from './DashboardStats';
-import { useWebSocket } from '../../hooks/useWebSocket';
 import { 
   Filter, 
   Search, 
@@ -29,9 +28,6 @@ export const DeviceGrid = () => {
   const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'ONLINE' | 'OFFLINE'
   const [viewMode, setViewMode] = useState('HIERARCHY'); // 'HIERARCHY' | 'FLAT'
   const [collapsedTrains, setCollapsedTrains] = useState({});
-
-  // Initialize WebSocket connection for live telemetry stream
-  useWebSocket();
 
   useEffect(() => {
     fetchDevices();
