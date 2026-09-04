@@ -10,7 +10,6 @@ import {
   Power, 
   Timer, 
   Activity,
-  Wind,
   ShieldAlert,
   ChevronRight,
   Wifi,
@@ -61,6 +60,10 @@ export const DeviceCard = ({ device, onEdit, onDelete, hideActions }) => {
 
   const bat1Pct = getBatteryPercent(device.battery_1_voltage);
   const bat2Pct = getBatteryPercent(device.battery_2_voltage);
+
+  // Map AC 1 / AC 2 to Main MCB and FSDS MCB with backwards fallback
+  const mainMcb = device.ac_1_status ?? device.main_mcb_status ?? null;
+  const fsdsMcb = device.ac_2_status ?? device.fsds_mcb_status ?? null;
 
   return (
     <div 
@@ -189,53 +192,29 @@ export const DeviceCard = ({ device, onEdit, onDelete, hideActions }) => {
         </div>
       </div>
 
-      {/* 4. Tactile MCB & AC Switches Grid (Clean, Contained 2x2) */}
+      {/* 4. Tactile MCB Switches Grid (Main MCB & FSDS MCB) */}
       <div className="telemetry-switches-grid">
         {/* Main MCB */}
-        <div className={`switch-status-pill switch-${device.main_mcb_status === 'ON' ? 'on' : (device.main_mcb_status === 'OFF' ? 'off' : 'null')}`}>
+        <div className={`switch-status-pill switch-${mainMcb === 'ON' ? 'on' : (mainMcb === 'OFF' ? 'off' : 'null')}`}>
           <div className="switch-meta">
             <Power size={12} />
             <span>Main MCB</span>
           </div>
           <div className="switch-state-indicator">
-            <span className={`switch-led led-${device.main_mcb_status === 'ON' ? 'on' : (device.main_mcb_status === 'OFF' ? 'off' : 'null')}`} />
-            <span className="switch-val-text">{device.main_mcb_status || 'N/A'}</span>
+            <span className={`switch-led led-${mainMcb === 'ON' ? 'on' : (mainMcb === 'OFF' ? 'off' : 'null')}`} />
+            <span className="switch-val-text">{mainMcb || 'N/A'}</span>
           </div>
         </div>
 
         {/* FSDS MCB */}
-        <div className={`switch-status-pill switch-${device.fsds_mcb_status === 'ON' ? 'on' : (device.fsds_mcb_status === 'OFF' ? 'off' : 'null')}`}>
+        <div className={`switch-status-pill switch-${fsdsMcb === 'ON' ? 'on' : (fsdsMcb === 'OFF' ? 'off' : 'null')}`}>
           <div className="switch-meta">
             <Power size={12} />
             <span>FSDS MCB</span>
           </div>
           <div className="switch-state-indicator">
-            <span className={`switch-led led-${device.fsds_mcb_status === 'ON' ? 'on' : (device.fsds_mcb_status === 'OFF' ? 'off' : 'null')}`} />
-            <span className="switch-val-text">{device.fsds_mcb_status || 'N/A'}</span>
-          </div>
-        </div>
-
-        {/* AC 1 */}
-        <div className={`switch-status-pill switch-${device.ac_1_status === 'ON' ? 'on' : (device.ac_1_status === 'OFF' ? 'off' : 'null')}`}>
-          <div className="switch-meta">
-            <Wind size={12} />
-            <span>AC 1</span>
-          </div>
-          <div className="switch-state-indicator">
-            <span className={`switch-led led-${device.ac_1_status === 'ON' ? 'on' : (device.ac_1_status === 'OFF' ? 'off' : 'null')}`} />
-            <span className="switch-val-text">{device.ac_1_status || 'N/A'}</span>
-          </div>
-        </div>
-
-        {/* AC 2 */}
-        <div className={`switch-status-pill switch-${device.ac_2_status === 'ON' ? 'on' : (device.ac_2_status === 'OFF' ? 'off' : 'null')}`}>
-          <div className="switch-meta">
-            <Wind size={12} />
-            <span>AC 2</span>
-          </div>
-          <div className="switch-state-indicator">
-            <span className={`switch-led led-${device.ac_2_status === 'ON' ? 'on' : (device.ac_2_status === 'OFF' ? 'off' : 'null')}`} />
-            <span className="switch-val-text">{device.ac_2_status || 'N/A'}</span>
+            <span className={`switch-led led-${fsdsMcb === 'ON' ? 'on' : (fsdsMcb === 'OFF' ? 'off' : 'null')}`} />
+            <span className="switch-val-text">{fsdsMcb || 'N/A'}</span>
           </div>
         </div>
       </div>

@@ -3,9 +3,9 @@ import ReactECharts from 'echarts-for-react';
 export const ACStatusChart = ({ data = [] }) => {
   const times = data.map(d => new Date(d.time).toLocaleString());
   
-  // Map ON to 1, OFF to 0
-  const ac1 = data.map(d => d.ac_1_status === 'ON' ? 1 : 0);
-  const ac2 = data.map(d => d.ac_2_status === 'ON' ? 1 : 0);
+  // Map ON to 1, OFF to 0 (supports ac_1_status/ac_2_status and main_mcb_status/fsds_mcb_status)
+  const ac1 = data.map(d => (d.ac_1_status ?? d.main_mcb_status) === 'ON' ? 1 : 0);
+  const ac2 = data.map(d => (d.ac_2_status ?? d.fsds_mcb_status) === 'ON' ? 1 : 0);
 
   const isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   const textColor = isDarkMode ? '#b2bec3' : '#6b7c8a';
@@ -25,7 +25,7 @@ export const ACStatusChart = ({ data = [] }) => {
       }
     },
     legend: {
-      data: ['Mains 1', 'Mains 2'],
+      data: ['Main MCB', 'FSDS MCB'],
       textStyle: { color: textColor },
       top: 0
     },
@@ -49,7 +49,7 @@ export const ACStatusChart = ({ data = [] }) => {
     },
     series: [
       {
-        name: 'Mains 1',
+        name: 'Main MCB',
         type: 'line',
         step: 'end',
         data: ac1,
@@ -57,7 +57,7 @@ export const ACStatusChart = ({ data = [] }) => {
         lineStyle: { width: 2 }
       },
       {
-        name: 'Mains 2',
+        name: 'FSDS MCB',
         type: 'line',
         step: 'end',
         data: ac2,

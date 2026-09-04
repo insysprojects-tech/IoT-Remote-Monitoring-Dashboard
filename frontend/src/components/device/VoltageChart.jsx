@@ -14,7 +14,8 @@ export const VoltageChart = ({ data = [] }) => {
     tooltip: {
       trigger: 'axis',
       backgroundColor: isDarkMode ? '#1e1e1e' : '#fff',
-      textStyle: { color: isDarkMode ? '#fff' : '#000' }
+      textStyle: { color: isDarkMode ? '#fff' : '#000' },
+      valueFormatter: (value) => (value !== null && value !== undefined ? `${Number(value).toFixed(2)} V` : '--')
     },
     legend: {
       data: ['Battery 1', 'Battery 2'],
@@ -36,8 +37,14 @@ export const VoltageChart = ({ data = [] }) => {
     },
     yAxis: {
       type: 'value',
-      min: 2.8,
-      max: 4.4,
+      min: (value) => {
+        if (!Number.isFinite(value.min) || value.min <= 0) return 0;
+        return Math.max(0, Math.min(9, Math.floor(value.min)));
+      },
+      max: (value) => {
+        if (!Number.isFinite(value.max) || value.max <= 0) return 15;
+        return Math.max(15, Math.ceil(value.max));
+      },
       axisLabel: { formatter: '{value} V', color: textColor },
       splitLine: { lineStyle: { color: gridColor } }
     },
