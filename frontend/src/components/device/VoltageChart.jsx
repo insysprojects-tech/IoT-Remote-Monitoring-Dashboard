@@ -1,4 +1,5 @@
 import ReactECharts from 'echarts-for-react';
+import { useTheme } from '../../hooks/useTheme';
 
 export const VoltageChart = ({ data = [] }) => {
   // Format data for ECharts
@@ -6,15 +7,16 @@ export const VoltageChart = ({ data = [] }) => {
   const v1 = data.map(d => d.battery_1_voltage);
   const v2 = data.map(d => d.battery_2_voltage);
 
-  const isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const textColor = isDarkMode ? '#b2bec3' : '#6b7c8a';
-  const gridColor = isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+  const { isDark } = useTheme();
+  const textColor = isDark ? '#94a3b8' : '#475569';
+  const gridColor = isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.06)';
 
   const option = {
     tooltip: {
       trigger: 'axis',
-      backgroundColor: isDarkMode ? '#1e1e1e' : '#fff',
-      textStyle: { color: isDarkMode ? '#fff' : '#000' },
+      backgroundColor: isDark ? '#1e293b' : '#ffffff',
+      borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+      textStyle: { color: isDark ? '#f8fafc' : '#0f172a' },
       valueFormatter: (value) => (value !== null && value !== undefined ? `${Number(value).toFixed(2)} V` : '--')
     },
     legend: {
@@ -82,5 +84,5 @@ export const VoltageChart = ({ data = [] }) => {
     ]
   };
 
-  return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} />;
+  return <ReactECharts option={option} style={{ height: '100%', width: '100%' }} notMerge={true} lazyUpdate={true} />;
 };
