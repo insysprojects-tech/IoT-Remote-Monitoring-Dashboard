@@ -51,7 +51,8 @@ export const useWebSocket = (customUrl) => {
   const ws = useRef(null);
   const reconnectTimer = useRef(null);
   const pingTimer = useRef(null);
-  const { setWsStatus, updateDeviceTelemetry } = useDeviceStore();
+  const stalenessTimer = useRef(null);
+  const { setWsStatus, updateDeviceTelemetry, checkStaleDevices } = useDeviceStore();
   const { addRealtimeAlert } = useAlertStore();
 
   const url = customUrl || getResolvedWsUrl();
@@ -135,13 +136,19 @@ export const useWebSocket = (customUrl) => {
 
     connect();
 
+    // Periodic watchdog to verify device freshness against last_seen
+    stalenessTimer.current = setInterval(() => {
+      checkStaleDevices();
+    }, 5000);
+
     return () => {
       isDestroyed = true;
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       if (pingTimer.current) clearInterval(pingTimer.current);
+      if (stalenessTimer.current) clearInterval(stalenessTimer.current);
       if (ws.current) {
         ws.current.close();
       }
     };
-  }, [url, setWsStatus, updateDeviceTelemetry, addRealtimeAlert]);
+  }, [url, setWsStatus, updateDeviceTelemetry, addRealtimeAlert, checkStaleDevices]);
 };

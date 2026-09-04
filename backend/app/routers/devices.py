@@ -3,12 +3,14 @@ Devices router — CRUD endpoints for device management.
 """
 
 import uuid
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db
 from app.models.device import Device
 from app.models.user import User
@@ -25,13 +27,26 @@ async def list_devices(
     current_user: User = Depends(get_current_user),
 ):
     """List all registered devices with optional online filter."""
+    now = datetime.now(timezone.utc)
+    threshold = now - timedelta(seconds=settings.DEVICE_OFFLINE_TIMEOUT)
+
     query = select(Device).order_by(Device.created_at.desc())
 
-    if online_only is not None:
-        query = query.where(Device.is_online == online_only)
+    if online_only is True:
+        query = query.where(Device.is_online == True, Device.last_seen >= threshold)
+    elif online_only is False:
+        query = query.where(
+            (Device.is_online == False) | (Device.last_seen < threshold) | (Device.last_seen == None)
+        )
 
     result = await db.execute(query)
     devices = result.scalars().all()
+
+    # Dynamically verify is_online accurately reflects real-time freshness
+    for device in devices:
+        if device.is_online and (device.last_seen is None or device.last_seen < threshold):
+            device.is_online = False
+
     return devices
 
 
@@ -41,9 +56,15 @@ async def device_stats(
     current_user: User = Depends(get_current_user),
 ):
     """Get aggregate device statistics for the dashboard header."""
+    now = datetime.now(timezone.utc)
+    threshold = now - timedelta(seconds=settings.DEVICE_OFFLINE_TIMEOUT)
+
     total = await db.execute(select(func.count(Device.id)))
     online = await db.execute(
-        select(func.count(Device.id)).where(Device.is_online == True)
+        select(func.count(Device.id)).where(
+            Device.is_online == True,
+            Device.last_seen >= threshold,
+        )
     )
 
     total_count = total.scalar() or 0
@@ -68,6 +89,11 @@ async def get_device(
 
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
+
+    now = datetime.now(timezone.utc)
+    threshold = now - timedelta(seconds=settings.DEVICE_OFFLINE_TIMEOUT)
+    if device.is_online and (device.last_seen is None or device.last_seen < threshold):
+        device.is_online = False
 
     return device
 

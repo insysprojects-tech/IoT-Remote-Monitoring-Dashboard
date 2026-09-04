@@ -101,8 +101,8 @@ class Settings(BaseSettings):
         return origins
 
     # --- Device Offline Detection ---
-    DEVICE_OFFLINE_TIMEOUT: int = 120  # Seconds without data before marking offline
-    DEVICE_OFFLINE_CHECK_INTERVAL: int = 30  # How often to check for offline devices
+    DEVICE_OFFLINE_TIMEOUT: int = 60  # Seconds without data before marking offline (firmware sends every 3s)
+    DEVICE_OFFLINE_CHECK_INTERVAL: int = 15  # How often to check for offline devices (seconds)
 
     # --- Data Retention (Supabase Free Tier Safety) ---
     TELEMETRY_RETENTION_HOURS: int = 24  # Keep last 24 hours of telemetry

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useDeviceStore } from '../../store/deviceStore';
 import { DeviceCard } from './DeviceCard';
 import { DashboardStats } from './DashboardStats';
+import { isDeviceOnline } from '../../utils/deviceStatus';
 import { 
   Filter, 
   Search, 
@@ -71,8 +72,9 @@ export const DeviceGrid = () => {
         return false;
       }
       // 3. Online/Offline filter
-      if (statusFilter === 'ONLINE' && !d.is_online) return false;
-      if (statusFilter === 'OFFLINE' && d.is_online) return false;
+      const isOnline = isDeviceOnline(d);
+      if (statusFilter === 'ONLINE' && !isOnline) return false;
+      if (statusFilter === 'OFFLINE' && isOnline) return false;
 
       // 4. Smart Multi-Field Search (Train No, Coach No, Name, MAC, Location)
       if (searchTerm.trim() !== '') {
@@ -327,7 +329,7 @@ export const DeviceGrid = () => {
           {Object.entries(groupedDevices).sort((a,b) => a[0].localeCompare(b[0])).map(([trainName, coaches]) => {
             const isCollapsed = collapsedTrains[trainName];
             const trainDevicesList = Object.values(coaches).flat();
-            const onlineCount = trainDevicesList.filter(d => d.is_online).length;
+            const onlineCount = trainDevicesList.filter(d => isDeviceOnline(d)).length;
             const coachCount = Object.keys(coaches).length;
 
             return (

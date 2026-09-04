@@ -1,13 +1,14 @@
 import React, { useMemo } from 'react';
 import { Train, LayoutGrid, Radio, AlertTriangle, ShieldCheck, Zap } from 'lucide-react';
 import { useAlertStore } from '../../store/alertStore';
+import { isDeviceOnline } from '../../utils/deviceStatus';
 
 export const DashboardStats = ({ devices = [] }) => {
   const { unreadCount, criticalCount } = useAlertStore();
 
   const stats = useMemo(() => {
     const totalDevices = devices.length;
-    const onlineDevices = devices.filter(d => d.is_online).length;
+    const onlineDevices = devices.filter(d => isDeviceOnline(d)).length;
     const offlineDevices = totalDevices - onlineDevices;
     
     const trains = new Set();

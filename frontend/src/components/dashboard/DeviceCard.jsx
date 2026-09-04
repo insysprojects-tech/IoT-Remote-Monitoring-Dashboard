@@ -19,10 +19,11 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
+import { isDeviceOnline } from '../../utils/deviceStatus';
 
 export const DeviceCard = ({ device, onEdit, onDelete, hideActions }) => {
   const navigate = useNavigate();
-  const isOnline = Boolean(device.is_online);
+  const isOnline = isDeviceOnline(device);
 
   // Format relative timestamp
   let lastSeenText = 'Offline';

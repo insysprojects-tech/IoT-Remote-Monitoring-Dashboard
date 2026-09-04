@@ -6,12 +6,20 @@ import { formatDistanceToNow } from 'date-fns';
 import { VoltageChart } from './VoltageChart';
 import { ACStatusChart } from './ACStatusChart';
 import { ChargeGauge } from './ChargeGauge';
+import { isDeviceOnline } from '../../utils/deviceStatus';
 
 export const DeviceDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { currentDevice, deviceTelemetry, isLoading, error, fetchDevice, fetchTelemetry } = useDeviceStore();
   const [timeRange, setTimeRange] = useState('24h'); // '1h', '6h', '24h', '7d'
+  const [, setTick] = useState(0);
+
+  // Periodic tick so live status transitions accurately in real time
+  useEffect(() => {
+    const timer = setInterval(() => setTick(t => t + 1), 5000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     fetchDevice(id);
@@ -39,7 +47,7 @@ export const DeviceDetail = () => {
     return <div style={{ padding: '40px', color: 'var(--status-red)' }}>Error loading device details.</div>;
   }
 
-  const isOnline = currentDevice.is_online;
+  const isOnline = isDeviceOnline(currentDevice);
   const statusColor = isOnline ? 'var(--status-green)' : 'var(--status-gray)';
   
   let lastSeenText = 'Never';
