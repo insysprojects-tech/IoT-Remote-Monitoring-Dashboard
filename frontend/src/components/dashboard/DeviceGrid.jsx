@@ -29,6 +29,13 @@ export const DeviceGrid = () => {
   const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'ONLINE' | 'OFFLINE'
   const [viewMode, setViewMode] = useState('HIERARCHY'); // 'HIERARCHY' | 'FLAT'
   const [collapsedTrains, setCollapsedTrains] = useState({});
+  const [, setTick] = useState(0);
+
+  // Real-time 1-second tick to immediately catch 10s cutoff without lag
+  useEffect(() => {
+    const timer = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     fetchDevices();

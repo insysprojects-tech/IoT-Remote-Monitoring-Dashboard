@@ -59,8 +59,8 @@ export const DeviceCard = ({ device, onEdit, onDelete, hideActions }) => {
     return 'Critical';
   };
 
-  const bat1Pct = getBatteryPercent(device.battery_1_voltage);
-  const bat2Pct = getBatteryPercent(device.battery_2_voltage);
+  const bat1Pct = isOnline ? getBatteryPercent(device.battery_1_voltage) : null;
+  const bat2Pct = isOnline ? getBatteryPercent(device.battery_2_voltage) : null;
 
   // Map AC 1 / AC 2 to Main MCB and FSDS MCB with backwards fallback
   const mainMcb = device.ac_1_status ?? device.main_mcb_status ?? null;
@@ -143,52 +143,52 @@ export const DeviceCard = ({ device, onEdit, onDelete, hideActions }) => {
       {/* 3. Dual Battery Telemetry Gauges */}
       <div className="battery-telemetry-section">
         {/* Battery 1 */}
-        <div className={`battery-gauge-card border-${getVoltageStatusClass(device.battery_1_voltage)}`}>
+        <div className={`battery-gauge-card border-${isOnline ? getVoltageStatusClass(device.battery_1_voltage) : 'voltage-neutral'}`}>
           <div className="gauge-header">
             <div className="gauge-title">
               <Battery size={13} className="gauge-icon" />
               <span>Battery 1</span>
             </div>
-            <span className={`gauge-voltage ${getVoltageStatusClass(device.battery_1_voltage)}`}>
-              {device.battery_1_voltage !== null && device.battery_1_voltage !== undefined
+            <span className={`gauge-voltage ${isOnline ? getVoltageStatusClass(device.battery_1_voltage) : 'voltage-neutral'}`}>
+              {isOnline && device.battery_1_voltage !== null && device.battery_1_voltage !== undefined
                 ? `${device.battery_1_voltage.toFixed(2)}V`
                 : '--'}
             </span>
           </div>
           <div className="gauge-track">
             <div 
-              className={`gauge-fill ${getVoltageStatusClass(device.battery_1_voltage)}`}
-              style={{ width: `${bat1Pct !== null ? bat1Pct : 0}%` }}
+              className={`gauge-fill ${isOnline ? getVoltageStatusClass(device.battery_1_voltage) : 'null'}`}
+              style={{ width: `${isOnline && bat1Pct !== null ? bat1Pct : 0}%` }}
             />
           </div>
           <div className="gauge-footer">
-            <span className="gauge-status-label">{getVoltageLabel(device.battery_1_voltage)}</span>
-            <span className="gauge-pct-text">{bat1Pct !== null ? `${bat1Pct}%` : 'Offline'}</span>
+            <span className="gauge-status-label">{isOnline ? getVoltageLabel(device.battery_1_voltage) : 'Offline'}</span>
+            <span className="gauge-pct-text">{isOnline && bat1Pct !== null ? `${bat1Pct}%` : 'Offline'}</span>
           </div>
         </div>
 
         {/* Battery 2 */}
-        <div className={`battery-gauge-card border-${getVoltageStatusClass(device.battery_2_voltage)}`}>
+        <div className={`battery-gauge-card border-${isOnline ? getVoltageStatusClass(device.battery_2_voltage) : 'voltage-neutral'}`}>
           <div className="gauge-header">
             <div className="gauge-title">
               <Battery size={13} className="gauge-icon" />
               <span>Battery 2</span>
             </div>
-            <span className={`gauge-voltage ${getVoltageStatusClass(device.battery_2_voltage)}`}>
-              {device.battery_2_voltage !== null && device.battery_2_voltage !== undefined
+            <span className={`gauge-voltage ${isOnline ? getVoltageStatusClass(device.battery_2_voltage) : 'voltage-neutral'}`}>
+              {isOnline && device.battery_2_voltage !== null && device.battery_2_voltage !== undefined
                 ? `${device.battery_2_voltage.toFixed(2)}V`
                 : '--'}
             </span>
           </div>
           <div className="gauge-track">
             <div 
-              className={`gauge-fill ${getVoltageStatusClass(device.battery_2_voltage)}`}
-              style={{ width: `${bat2Pct !== null ? bat2Pct : 0}%` }}
+              className={`gauge-fill ${isOnline ? getVoltageStatusClass(device.battery_2_voltage) : 'null'}`}
+              style={{ width: `${isOnline && bat2Pct !== null ? bat2Pct : 0}%` }}
             />
           </div>
           <div className="gauge-footer">
-            <span className="gauge-status-label">{getVoltageLabel(device.battery_2_voltage)}</span>
-            <span className="gauge-pct-text">{bat2Pct !== null ? `${bat2Pct}%` : 'Offline'}</span>
+            <span className="gauge-status-label">{isOnline ? getVoltageLabel(device.battery_2_voltage) : 'Offline'}</span>
+            <span className="gauge-pct-text">{isOnline && bat2Pct !== null ? `${bat2Pct}%` : 'Offline'}</span>
           </div>
         </div>
       </div>
@@ -196,26 +196,26 @@ export const DeviceCard = ({ device, onEdit, onDelete, hideActions }) => {
       {/* 4. Tactile MCB Switches Grid (Main MCB & FSDS MCB) */}
       <div className="telemetry-switches-grid">
         {/* Main MCB */}
-        <div className={`switch-status-pill switch-${mainMcb === 'ON' ? 'on' : (mainMcb === 'OFF' ? 'off' : 'null')}`}>
+        <div className={`switch-status-pill switch-${isOnline ? (mainMcb === 'ON' ? 'on' : (mainMcb === 'OFF' ? 'off' : 'null')) : 'null'}`}>
           <div className="switch-meta">
             <Power size={12} />
             <span>Main MCB</span>
           </div>
           <div className="switch-state-indicator">
-            <span className={`switch-led led-${mainMcb === 'ON' ? 'on' : (mainMcb === 'OFF' ? 'off' : 'null')}`} />
-            <span className="switch-val-text">{mainMcb || 'N/A'}</span>
+            <span className={`switch-led led-${isOnline ? (mainMcb === 'ON' ? 'on' : (mainMcb === 'OFF' ? 'off' : 'null')) : 'null'}`} />
+            <span className="switch-val-text">{isOnline ? (mainMcb || 'N/A') : '--'}</span>
           </div>
         </div>
 
         {/* FSDS MCB */}
-        <div className={`switch-status-pill switch-${fsdsMcb === 'ON' ? 'on' : (fsdsMcb === 'OFF' ? 'off' : 'null')}`}>
+        <div className={`switch-status-pill switch-${isOnline ? (fsdsMcb === 'ON' ? 'on' : (fsdsMcb === 'OFF' ? 'off' : 'null')) : 'null'}`}>
           <div className="switch-meta">
             <Power size={12} />
             <span>FSDS MCB</span>
           </div>
           <div className="switch-state-indicator">
-            <span className={`switch-led led-${fsdsMcb === 'ON' ? 'on' : (fsdsMcb === 'OFF' ? 'off' : 'null')}`} />
-            <span className="switch-val-text">{fsdsMcb || 'N/A'}</span>
+            <span className={`switch-led led-${isOnline ? (fsdsMcb === 'ON' ? 'on' : (fsdsMcb === 'OFF' ? 'off' : 'null')) : 'null'}`} />
+            <span className="switch-val-text">{isOnline ? (fsdsMcb || 'N/A') : '--'}</span>
           </div>
         </div>
       </div>

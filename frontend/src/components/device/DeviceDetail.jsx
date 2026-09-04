@@ -15,9 +15,9 @@ export const DeviceDetail = () => {
   const [timeRange, setTimeRange] = useState('24h'); // '1h', '6h', '24h', '7d'
   const [, setTick] = useState(0);
 
-  // Periodic tick so live status transitions accurately in real time
+  // Periodic tick so live status transitions accurately in real time every 1 second
   useEffect(() => {
-    const timer = setInterval(() => setTick(t => t + 1), 5000);
+    const timer = setInterval(() => setTick(t => t + 1), 1000);
     return () => clearInterval(timer);
   }, []);
 
@@ -67,8 +67,8 @@ export const DeviceDetail = () => {
     const clamped = Math.min(Math.max(voltage, minV), maxV);
     return Math.round(((clamped - minV) / (maxV - minV)) * 100);
   };
-  const bat1Percent = getBatteryPercent(currentDevice.battery_1_voltage);
-  const bat2Percent = getBatteryPercent(currentDevice.battery_2_voltage);
+  const bat1Percent = isOnline ? getBatteryPercent(currentDevice.battery_1_voltage) : 0;
+  const bat2Percent = isOnline ? getBatteryPercent(currentDevice.battery_2_voltage) : 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -133,17 +133,17 @@ export const DeviceDetail = () => {
             <h3 style={{ fontSize: '16px', marginBottom: '16px' }}>Current State</h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', textAlign: 'center' }}>
               <div>
-                <ChargeGauge value={bat1Percent} label="Bat 1" />
-                <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)', marginTop: '-6px' }}>
-                  {currentDevice.battery_1_voltage !== undefined && currentDevice.battery_1_voltage !== null
+                <ChargeGauge value={isOnline ? bat1Percent : 0} label="Bat 1" />
+                <div style={{ fontSize: '13px', fontWeight: '600', color: isOnline ? 'var(--text-primary)' : 'var(--text-muted)', marginTop: '-6px' }}>
+                  {isOnline && currentDevice.battery_1_voltage !== undefined && currentDevice.battery_1_voltage !== null
                     ? `${Number(currentDevice.battery_1_voltage).toFixed(2)} V`
                     : '--'}
                 </div>
               </div>
               <div>
-                <ChargeGauge value={bat2Percent} label="Bat 2" />
-                <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)', marginTop: '-6px' }}>
-                  {currentDevice.battery_2_voltage !== undefined && currentDevice.battery_2_voltage !== null
+                <ChargeGauge value={isOnline ? bat2Percent : 0} label="Bat 2" />
+                <div style={{ fontSize: '13px', fontWeight: '600', color: isOnline ? 'var(--text-primary)' : 'var(--text-muted)', marginTop: '-6px' }}>
+                  {isOnline && currentDevice.battery_2_voltage !== undefined && currentDevice.battery_2_voltage !== null
                     ? `${Number(currentDevice.battery_2_voltage).toFixed(2)} V`
                     : '--'}
                 </div>
@@ -158,8 +158,8 @@ export const DeviceDetail = () => {
                 {(() => {
                   const mcb1 = currentDevice.ac_1_status ?? currentDevice.main_mcb_status;
                   return (
-                    <span style={{ fontWeight: '600', color: mcb1 === 'ON' ? 'var(--status-green)' : (mcb1 === 'OFF' ? 'var(--status-red)' : 'var(--text-primary)') }}>
-                      {mcb1 || '--'}
+                    <span style={{ fontWeight: '600', color: isOnline ? (mcb1 === 'ON' ? 'var(--status-green)' : (mcb1 === 'OFF' ? 'var(--status-red)' : 'var(--text-primary)')) : 'var(--text-muted)' }}>
+                      {isOnline ? (mcb1 || '--') : '--'}
                     </span>
                   );
                 })()}
@@ -171,8 +171,8 @@ export const DeviceDetail = () => {
                 {(() => {
                   const mcb2 = currentDevice.ac_2_status ?? currentDevice.fsds_mcb_status;
                   return (
-                    <span style={{ fontWeight: '600', color: mcb2 === 'ON' ? 'var(--status-green)' : (mcb2 === 'OFF' ? 'var(--status-red)' : 'var(--text-primary)') }}>
-                      {mcb2 || '--'}
+                    <span style={{ fontWeight: '600', color: isOnline ? (mcb2 === 'ON' ? 'var(--status-green)' : (mcb2 === 'OFF' ? 'var(--status-red)' : 'var(--text-primary)')) : 'var(--text-muted)' }}>
+                      {isOnline ? (mcb2 || '--') : '--'}
                     </span>
                   );
                 })()}

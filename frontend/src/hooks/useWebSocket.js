@@ -136,10 +136,10 @@ export const useWebSocket = (customUrl) => {
 
     connect();
 
-    // Periodic watchdog to verify device freshness against last_seen
+    // Periodic watchdog to verify device freshness against last_seen every 1 second
     stalenessTimer.current = setInterval(() => {
       checkStaleDevices();
-    }, 5000);
+    }, 1000);
 
     return () => {
       isDestroyed = true;
